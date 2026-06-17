@@ -33,6 +33,7 @@ export function StepNode({ data, selected }: NodeProps) {
   const missing = 0; // computed badge omitted; gaps shown in report
   return (
     <div
+      data-testid="oilnode-step"
       className={baseCard}
       style={{
         width: 210,
@@ -70,6 +71,7 @@ export function PersonaNode({ data, selected }: NodeProps) {
   const d = data as OilNodeData;
   return (
     <div
+      data-testid="oilnode-persona"
       className={baseCard}
       style={{
         width: 176,
@@ -98,6 +100,7 @@ export function DataNode({ data, selected }: NodeProps) {
   const de = d.data;
   return (
     <div
+      data-testid="oilnode-data"
       className="relative rounded border px-2 py-1 text-left shadow transition-opacity"
       style={{
         width: 156,

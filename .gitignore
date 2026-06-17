@@ -16,3 +16,10 @@ data/
 .vite/
 coverage/
 *.tsbuildinfo
+
+# Playwright (binaries, reports, traces, and regenerated screenshots)
+test-results/
+playwright-report/
+e2e/__screens__/
+blob-report/
+.playwright/

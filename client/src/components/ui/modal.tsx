@@ -27,7 +27,10 @@ export function Modal({
 
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 p-8 backdrop-blur-sm">
+    <div
+      data-testid="modal"
+      className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 p-8 backdrop-blur-sm"
+    >
       <div
         className={cn(
           "panel mt-8 w-full max-w-lg bg-surface-raised shadow-2xl",

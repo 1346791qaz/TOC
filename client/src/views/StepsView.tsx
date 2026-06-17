@@ -170,7 +170,7 @@ function StepPersonas({ step, vsId }: { step: ProcessStep; vsId: string }) {
   const byId = new Map((personas.data ?? []).map((p) => [p.id, p]));
 
   return (
-    <Card>
+    <Card data-testid="step-personas">
       <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
         Personas (RACI)
       </p>

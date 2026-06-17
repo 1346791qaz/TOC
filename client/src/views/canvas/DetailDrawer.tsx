@@ -29,7 +29,10 @@ export function DetailDrawer({ node, onClose }: { node: OilNodeData | null; onCl
   if (!node || !cfg) return null;
 
   return (
-    <aside className="flex w-96 shrink-0 flex-col border-l border-border bg-surface">
+    <aside
+      data-testid="detail-drawer"
+      className="flex w-96 shrink-0 flex-col border-l border-border bg-surface"
+    >
       <div className="flex items-center justify-between border-b border-border px-3 py-2.5">
         <div>
           <p className="text-[10px] uppercase tracking-wider text-muted-foreground">

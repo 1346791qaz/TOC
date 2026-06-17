@@ -17,9 +17,15 @@ function coerce(field: FieldDef, raw: string | boolean): unknown {
     const n = Number(raw);
     return Number.isFinite(n) ? n : null;
   }
-  // text / textarea / select
+  if (field.type === "select") {
+    // Empty select => omit the key so the server's Zod default (or required
+    // check) applies, rather than sending "" which fails enum validation.
+    const s = String(raw);
+    return s === "" ? undefined : s;
+  }
+  // text / textarea
   const s = String(raw);
-  if (field.type !== "select" && s.trim() === "") return field.required ? "" : null;
+  if (s.trim() === "") return field.required ? "" : null;
   return s;
 }
 
@@ -41,6 +47,10 @@ export function EntityForm({
     for (const f of fields) {
       const init = initial?.[f.name];
       if (f.type === "boolean") v[f.name] = Boolean(init);
+      // Enum selects with static options default to their first option (so an
+      // untouched select posts a valid value, not "").
+      else if (f.type === "select" && f.options && (init === undefined || init === null || init === ""))
+        v[f.name] = f.options[0];
       else v[f.name] = init ?? "";
     }
     return v;
@@ -66,6 +76,7 @@ export function EntityForm({
               className={`${span} flex items-center gap-2 rounded-md border border-border bg-input px-2.5 py-2 text-sm`}
             >
               <input
+                data-testid={`field-${f.name}`}
                 type="checkbox"
                 checked={Boolean(values[f.name])}
                 onChange={(e) => set(f.name, e.target.checked)}
@@ -79,6 +90,7 @@ export function EntityForm({
           <Field key={f.name} label={f.label + (f.required ? " *" : "")} className={span}>
             {f.type === "textarea" ? (
               <Textarea
+                data-testid={`field-${f.name}`}
                 value={String(values[f.name] ?? "")}
                 onChange={(e) => set(f.name, e.target.value)}
                 placeholder={f.placeholder}
@@ -86,6 +98,7 @@ export function EntityForm({
               />
             ) : f.type === "select" ? (
               <Select
+                data-testid={`field-${f.name}`}
                 value={String(values[f.name] ?? "")}
                 onChange={(e) => set(f.name, e.target.value)}
                 required={f.required}
@@ -101,6 +114,7 @@ export function EntityForm({
               </Select>
             ) : (
               <Input
+                data-testid={`field-${f.name}`}
                 type={f.type === "number" ? "number" : "text"}
                 step="any"
                 value={String(values[f.name] ?? "")}

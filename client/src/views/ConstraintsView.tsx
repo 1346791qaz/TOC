@@ -202,10 +202,15 @@ export function ConstraintForm({
     >
       <form id="constraint-form" onSubmit={submit} className="grid grid-cols-2 gap-3">
         <Field label="Title *" className="col-span-2">
-          <Input value={form.title} onChange={(e) => set("title", e.target.value)} required />
+          <Input
+            data-testid="cf-title"
+            value={form.title}
+            onChange={(e) => set("title", e.target.value)}
+            required
+          />
         </Field>
         <Field label="Kind">
-          <Select value={form.kind} onChange={(e) => set("kind", e.target.value as never)}>
+          <Select data-testid="cf-kind" value={form.kind} onChange={(e) => set("kind", e.target.value as never)}>
             {CONSTRAINT_KINDS.map((k) => (
               <option key={k} value={k}>
                 {titleCase(k)}
@@ -214,7 +219,7 @@ export function ConstraintForm({
           </Select>
         </Field>
         <Field label="Severity">
-          <Select value={form.severity} onChange={(e) => set("severity", e.target.value as never)}>
+          <Select data-testid="cf-severity" value={form.severity} onChange={(e) => set("severity", e.target.value as never)}>
             {SEVERITIES.map((s) => (
               <option key={s} value={s}>
                 {titleCase(s)}
@@ -224,6 +229,7 @@ export function ConstraintForm({
         </Field>
         <Field label="Target type">
           <Select
+            data-testid="cf-target_type"
             value={form.target_type}
             onChange={(e) => {
               set("target_type", e.target.value as never);
@@ -239,6 +245,7 @@ export function ConstraintForm({
         </Field>
         <Field label="Target">
           <Select
+            data-testid="cf-target_id"
             value={form.target_id}
             onChange={(e) => set("target_id", e.target.value)}
             disabled={form.target_type === "value_stream"}
@@ -253,7 +260,7 @@ export function ConstraintForm({
         </Field>
         {form.kind === "risk" && (
           <Field label="Likelihood">
-            <Select value={form.likelihood} onChange={(e) => set("likelihood", e.target.value as never)}>
+            <Select data-testid="cf-likelihood" value={form.likelihood} onChange={(e) => set("likelihood", e.target.value as never)}>
               <option value="">—</option>
               {LIKELIHOODS.map((l) => (
                 <option key={l} value={l}>
@@ -274,6 +281,7 @@ export function ConstraintForm({
         </Field>
         <label className="col-span-2 flex items-center gap-2 rounded-md border border-border bg-input px-2.5 py-2 text-sm">
           <input
+            data-testid="cf-system"
             type="checkbox"
             checked={form.is_system_constraint}
             onChange={(e) => set("is_system_constraint", e.target.checked)}

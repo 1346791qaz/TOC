@@ -131,3 +131,21 @@ npm test
 Covers the soft-delete query layer, the constraint-candidate scoring function,
 and the engagement export/import round-trip (including id remapping on
 collision).
+
+### End-to-end (Playwright)
+
+```bash
+npm run test:e2e
+```
+
+A 13-test browser suite drives every feature against a freshly seeded database
+(steps CRUD + RACI + data binding, persona scope filter, gap report, constraint
+register, candidate ranking + promotion, metrics, assumptions, the OIL canvas
+with layout modes / layer toggles / inline-edit / drag-to-connect, command
+palette, trash & restore, structured import + engagement export). The suite
+starts the app automatically; if the app is already running on
+`localhost:5173` it reuses it. Screenshots are written to `e2e/__screens__/`.
+
+> Note: the suite expects each run to start from a clean seed. When driving the
+> app yourself, point it at a throwaway DB:
+> `OIL_DB_PATH=data/e2e.sqlite npm run seed && OIL_DB_PATH=data/e2e.sqlite npm run dev`.
