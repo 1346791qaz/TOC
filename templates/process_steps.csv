@@ -1,0 +1,3 @@
+name,sequence_index,entry_criteria,action,exit_criteria,cycle_time,wait_time,pct_complete_accurate
+Heat Treat,6,Finished part received,Temper and quench per spec,Hardness verified,4,2,75
+Final Audit,7,Heat-treated part,Audit against drawing,Released to stock,1,3,80

@@ -1,0 +1,3 @@
+step_name,name,binding_point,presence,data_type,source_system,is_key,quality_notes
+Inspection,Gauge calibration record,entry,partial,doc,Calibration log,true,Sometimes expired
+Pack & Ship,Certificate of Conformance,exit,missing,doc,None,true,Not generated automatically

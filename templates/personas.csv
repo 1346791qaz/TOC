@@ -1,0 +1,3 @@
+name,role_title,function,scope_level,responsibilities,authority_notes
+Heat Treat Operator,Furnace Tech,Heat Treat,local,Runs temper/quench cycles,Owns furnace recipes
+Quality Manager,QA Lead,Quality,system,Owns quality system,Approves scrap dispositions and CAPA

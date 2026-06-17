@@ -1,0 +1,70 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Intelligence-analysis console palette: deep slate surfaces, a single amber
+   accent, and a disciplined operational status system. */
+@layer base {
+  :root {
+    --background: 222 30% 6%;
+    --foreground: 210 20% 90%;
+    --surface: 220 26% 9%;
+    --surface-raised: 219 24% 12%;
+    --muted: 218 18% 18%;
+    --muted-foreground: 215 14% 58%;
+    --border: 218 20% 16%;
+    --input: 218 22% 14%;
+    --ring: 38 92% 50%;
+
+    --primary: 38 92% 52%; /* amber accent, used sparingly */
+    --primary-foreground: 30 40% 8%;
+    --accent: 190 90% 45%; /* cyan secondary */
+    --accent-foreground: 200 40% 8%;
+
+    --status-gap: 38 92% 55%; /* amber — data gaps */
+    --status-critical: 0 80% 58%; /* red — critical constraint */
+    --status-healthy: 160 60% 45%; /* teal/green — healthy */
+    --status-warn: 28 90% 55%;
+    --status-info: 200 80% 55%;
+
+    --node-step: 210 70% 55%;
+    --node-persona: 270 55% 62%;
+    --node-data: 190 70% 50%;
+    --node-constraint: 0 75% 58%;
+
+    --radius: 0.375rem;
+  }
+
+  * {
+    @apply border-border;
+  }
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+  /* Dense console scrollbars */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply rounded bg-muted;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+}
+
+@layer components {
+  .panel {
+    @apply rounded-md border border-border bg-surface;
+  }
+  .mono {
+    @apply font-mono text-xs tracking-tight;
+  }
+}
