@@ -9,9 +9,11 @@ import {
   useEdgesState,
   useNodesState,
   useReactFlow,
+  type Connection,
   type Edge,
   type Node,
 } from "@xyflow/react";
+import { EDGE_TYPES, type EdgeType, type FlowNodeType } from "@shared/enums";
 import type {
   Constraint,
   DataElement,
@@ -20,10 +22,11 @@ import type {
   ProcessStep,
   StepPersona,
 } from "@shared/schemas";
-import { useList } from "@/lib/queries";
+import { useCreate, useList, useSoftDelete } from "@/lib/queries";
 import { useUi, type LayoutMode } from "@/store";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/primitives";
+import { titleCase } from "@/lib/display";
+import { Button, Select } from "@/components/ui/primitives";
 import { buildGraph, type OilNodeData } from "./canvas/buildGraph";
 import { layoutElk } from "./canvas/layout";
 import { nodeTypes } from "./canvas/nodes";
@@ -52,6 +55,31 @@ function CanvasInner({ vsId }: { vsId: string }) {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node<OilNodeData>>([]);
   const [rfEdges, setRfEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [selected, setSelected] = useState<OilNodeData | null>(null);
+  const [newEdgeType, setNewEdgeType] = useState<EdgeType>("dependency");
+  const createEdge = useCreate<FlowEdge>("flow_edges");
+  const deleteEdge = useSoftDelete("flow_edges");
+
+  // Manually add cross-cutting dependency edges by dragging between node handles.
+  const onConnect = (c: Connection) => {
+    if (!c.source || !c.target || c.source === c.target) return;
+    const [fromType, fromId] = c.source.split(/:(.+)/) as [FlowNodeType, string];
+    const [toType, toId] = c.target.split(/:(.+)/) as [FlowNodeType, string];
+    createEdge.mutate({
+      value_stream_id: vsId,
+      from_type: fromType,
+      from_id: fromId,
+      to_type: toType,
+      to_id: toId,
+      edge_type: newEdgeType,
+      notes: null,
+    });
+  };
+
+  const onEdgesDelete = (deleted: Edge[]) => {
+    for (const e of deleted) {
+      if (e.id.startsWith("fe-")) deleteEdge.mutate(e.id.slice(3));
+    }
+  };
 
   const stepIds = useMemo(
     () => new Set((steps.data ?? []).map((s) => s.id)),
@@ -126,6 +154,20 @@ function CanvasInner({ vsId }: { vsId: string }) {
               Highlighting the system constraint and everything subordinate (downstream).
             </div>
           )}
+          <div className="flex items-center gap-1.5 rounded-md border border-border bg-surface/90 p-1 text-[11px] text-muted-foreground backdrop-blur">
+            <span className="pl-1">Drag to link · new edge:</span>
+            <Select
+              value={newEdgeType}
+              onChange={(e) => setNewEdgeType(e.target.value as EdgeType)}
+              className="h-7 w-32"
+            >
+              {EDGE_TYPES.map((t) => (
+                <option key={t} value={t}>
+                  {titleCase(t)}
+                </option>
+              ))}
+            </Select>
+          </div>
         </div>
 
         <ReactFlow
@@ -133,6 +175,8 @@ function CanvasInner({ vsId }: { vsId: string }) {
           edges={rfEdges}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
+          onConnect={onConnect}
+          onEdgesDelete={onEdgesDelete}
           nodeTypes={nodeTypes}
           onNodeClick={(_, n) => setSelected(n.data as OilNodeData)}
           onPaneClick={() => setSelected(null)}
