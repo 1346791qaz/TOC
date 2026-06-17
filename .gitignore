@@ -1,0 +1,18 @@
+node_modules/
+dist/
+*.local
+.DS_Store
+.env
+
+# Local SQLite database files (data is machine-local, never committed)
+data/
+*.sqlite
+*.sqlite3
+*.db
+*.db-shm
+*.db-wal
+
+# Build / cache
+.vite/
+coverage/
+*.tsbuildinfo
