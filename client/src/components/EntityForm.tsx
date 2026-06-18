@@ -47,11 +47,19 @@ export function EntityForm({
     for (const f of fields) {
       const init = initial?.[f.name];
       if (f.type === "boolean") v[f.name] = Boolean(init);
-      // Enum selects with static options default to their first option (so an
-      // untouched select posts a valid value, not "").
-      else if (f.type === "select" && f.options && (init === undefined || init === null || init === ""))
-        v[f.name] = f.options[0];
-      else v[f.name] = init ?? "";
+      // Selects default to their first option so the state matches what the
+      // native <select> displays. Without this, an untouched dropdown shows its
+      // first option but the controlled value is still "" — the form would then
+      // post an empty value and fail validation. Covers both static enum
+      // options and dynamically supplied options (e.g. the step picker).
+      else if (f.type === "select" && (init === undefined || init === null || init === "")) {
+        const opts = f.options
+          ? Array.from(f.options)
+          : f.optionsKey
+            ? (dynamicOptions[f.optionsKey] ?? []).map((o) => o.value)
+            : [];
+        v[f.name] = opts[0] ?? "";
+      } else v[f.name] = init ?? "";
     }
     return v;
   });

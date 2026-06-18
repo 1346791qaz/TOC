@@ -107,6 +107,9 @@ test("04 · data elements: list and create with step picker", async ({ page }) =
   await expect(page.getByText("CNC program")).toBeVisible();
 
   await page.getByRole("button", { name: "Data element", exact: true }).click();
+  // The required step picker must default to a real step (not "") even when the
+  // user never touches it — otherwise the form posts an empty step and fails.
+  await expect(page.getByTestId("field-step_id")).not.toHaveValue("");
   await page.getByTestId("field-step_id").selectOption({ label: "Order Intake" });
   await page.getByTestId("field-name").fill("E2E DataView Elem");
   await page.getByTestId("field-presence").selectOption("partial");
