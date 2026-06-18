@@ -1,6 +1,6 @@
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import type Database from "better-sqlite3";
 import { getDb } from "./connection";
 
@@ -43,8 +43,8 @@ export function runMigrations(database: Database.Database = getDb()): string[] {
   return newlyApplied;
 }
 
-// Allow `npm run migrate` to run this file directly.
-if (import.meta.url === `file://${process.argv[1]}`) {
+// Allow `npm run migrate` to run this file directly (cross-platform check).
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const applied = runMigrations();
   if (applied.length === 0) {
     console.log("[migrate] database already up to date");

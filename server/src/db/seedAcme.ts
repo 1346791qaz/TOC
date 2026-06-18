@@ -1,3 +1,4 @@
+import { pathToFileURL } from "node:url";
 import { runMigrations } from "./migrate";
 import { repos } from "../repositories";
 
@@ -311,7 +312,7 @@ export function seedAcme(): { seeded: boolean } {
   return { seeded: true };
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const r = seedAcme();
   console.log(r.seeded ? "[seed:acme] ACME engagement inserted" : "[seed:acme] already present, skipped");
 }

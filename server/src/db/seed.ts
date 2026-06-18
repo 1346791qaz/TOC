@@ -1,3 +1,4 @@
+import { pathToFileURL } from "node:url";
 import { runMigrations } from "./migrate";
 import { getDb } from "./connection";
 import { repos } from "../repositories";
@@ -305,7 +306,8 @@ export function seed(): { seeded: boolean } {
   return { seeded: true };
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+// Cross-platform "run directly?" check (Windows paths break a string compare).
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const result = seed();
   console.log(result.seeded ? "[seed] seed data inserted" : "[seed] seed already present, skipped");
 }
