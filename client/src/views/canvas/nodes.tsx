@@ -123,8 +123,94 @@ export function DataNode({ data, selected }: NodeProps) {
   );
 }
 
+// ---- Attached-cell layout components ------------------------------------
+
+// Faded department backdrop drawn behind a group of persona cells.
+export function DeptBackground({ data }: NodeProps) {
+  const d = data as OilNodeData;
+  return (
+    <div
+      style={{
+        width: "100%",
+        height: "100%",
+        background: d.deptBg ?? "hsla(270, 45%, 24%, 0.4)",
+        border: `1px dashed ${d.deptColor ?? "hsl(270 50% 50%)"}`,
+        borderRadius: 8,
+        pointerEvents: "none",
+      }}
+    >
+      <span
+        className="absolute left-1.5 top-1 text-[9px] font-semibold uppercase tracking-wider"
+        style={{ color: d.deptColor ?? "hsl(270 60% 80%)", opacity: 0.85 }}
+      >
+        {d.label}
+      </span>
+    </div>
+  );
+}
+
+export function PersonaCell({ data, selected }: NodeProps) {
+  const d = data as OilNodeData;
+  const color = d.deptColor ?? "hsl(270 55% 62%)";
+  return (
+    <div
+      data-testid="oilnode-persona"
+      className="relative box-border rounded-md border bg-surface-raised px-2 py-1"
+      style={{
+        width: 200,
+        height: 48,
+        borderColor: color,
+        background: "hsl(220 26% 13%)",
+        outline: selected ? "2px solid hsl(38 92% 52%)" : undefined,
+      }}
+    >
+      <ConstraintMarker data={d} />
+      <div className="flex items-center gap-1">
+        <User size={11} style={{ color }} />
+        <span className="truncate text-xs font-medium">{d.label}</span>
+      </div>
+      <div className="mt-0.5 flex items-center gap-1">
+        {d.roleOnStep && <Badge tone="info">{d.roleOnStep}</Badge>}
+        <span className="truncate text-[10px] text-muted-foreground">{d.persona?.function}</span>
+      </div>
+    </div>
+  );
+}
+
+export function DataCell({ data, selected }: NodeProps) {
+  const d = data as OilNodeData;
+  const de = d.data;
+  const warn = de && de.presence !== "present";
+  return (
+    <div
+      data-testid="oilnode-data"
+      className="relative box-border rounded border px-2 py-1"
+      style={{
+        width: 200,
+        height: 44,
+        borderColor: warn ? "hsl(38 92% 55%)" : "hsl(190 70% 50%)",
+        background: "hsl(190 40% 10%)",
+        outline: selected ? "2px solid hsl(38 92% 52%)" : undefined,
+      }}
+    >
+      <div className="flex items-center gap-1">
+        <Database size={11} style={{ color: "hsl(190 70% 60%)" }} />
+        <span className="truncate text-xs font-medium">{d.label}</span>
+      </div>
+      <div className="mt-0.5 flex items-center gap-1">
+        {de && <Badge>{de.binding_point}</Badge>}
+        {de && <Badge tone={presenceTone[de.presence]}>{de.presence}</Badge>}
+        {de?.is_key && <Badge tone="accent">key</Badge>}
+      </div>
+    </div>
+  );
+}
+
 export const nodeTypes = {
   step: StepNode,
   persona: PersonaNode,
   data_element: DataNode,
+  personaCell: PersonaCell,
+  dataCell: DataCell,
+  deptBg: DeptBackground,
 };

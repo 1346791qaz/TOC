@@ -28,6 +28,7 @@ import { cn } from "@/lib/utils";
 import { titleCase } from "@/lib/display";
 import { Button, Select } from "@/components/ui/primitives";
 import { buildGraph, type OilNodeData } from "./canvas/buildGraph";
+import { buildAttachedGraph } from "./canvas/attachedLayout";
 import { layoutElk } from "./canvas/layout";
 import { nodeTypes } from "./canvas/nodes";
 import { DetailDrawer } from "./canvas/DetailDrawer";
@@ -93,6 +94,27 @@ function CanvasInner({ vsId }: { vsId: string }) {
     if (!ready) return;
     const dataElements = (allData.data ?? []).filter((d) => stepIds.has(d.step_id));
     const stepPersonas = (allStepPersonas.data ?? []).filter((sp) => stepIds.has(sp.step_id));
+    const refit = () => setTimeout(() => fitView({ padding: 0.2, duration: 300 }), 50);
+
+    // "Full OIL" uses the attached-cell layout (personas/data hang under their
+    // step, dept swimlanes behind personas) — computed synchronously, no elk.
+    if (layoutMode === "full") {
+      const graph = buildAttachedGraph({
+        steps: steps.data ?? [],
+        personas: personas.data ?? [],
+        dataElements,
+        stepPersonas,
+        constraints: constraints.data ?? [],
+        edges: edges.data ?? [],
+        layers,
+      });
+      setNodes(graph.nodes);
+      setRfEdges(graph.edges);
+      refit();
+      return;
+    }
+
+    // Spine / constraint-focus keep the elk layered layout.
     const graph = buildGraph({
       steps: steps.data ?? [],
       personas: personas.data ?? [],
@@ -108,7 +130,7 @@ function CanvasInner({ vsId }: { vsId: string }) {
       if (cancelled) return;
       setNodes(positioned);
       setRfEdges(graph.edges);
-      setTimeout(() => fitView({ padding: 0.2, duration: 300 }), 50);
+      refit();
     });
     return () => {
       cancelled = true;
@@ -178,7 +200,10 @@ function CanvasInner({ vsId }: { vsId: string }) {
           onConnect={onConnect}
           onEdgesDelete={onEdgesDelete}
           nodeTypes={nodeTypes}
-          onNodeClick={(_, n) => setSelected(n.data as OilNodeData)}
+          onNodeClick={(_, n) => {
+            if (n.type === "deptBg") return; // department backdrop, not selectable
+            setSelected(n.data as OilNodeData);
+          }}
           onPaneClick={() => setSelected(null)}
           fitView
           minZoom={0.2}

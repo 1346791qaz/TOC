@@ -26,6 +26,11 @@ export interface OilNodeData extends Record<string, unknown> {
   step?: ProcessStep;
   persona?: Persona;
   data?: DataElement;
+  // Attached-cell layout extras
+  roleOnStep?: string;
+  deptColor?: string;
+  deptBg?: string;
+  isBackground?: boolean;
 }
 
 export const NODE_SIZES: Record<FlowNodeType, { width: number; height: number }> = {
