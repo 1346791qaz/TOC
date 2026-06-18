@@ -1,6 +1,7 @@
 import { runMigrations } from "./migrate";
 import { getDb } from "./connection";
 import { repos } from "../repositories";
+import { seedAcme } from "./seedAcme";
 
 // Deterministic ids keep the seed idempotent and make cross-references stable.
 const ID = {
@@ -25,8 +26,10 @@ const ID = {
 export function seed(): { seeded: boolean } {
   runMigrations();
 
+  // If the primary engagement already exists, still ensure the ACME sample is
+  // present (it has its own idempotency guard) and return.
   if (repos.engagements.get(ID.engagement, { includeDeleted: true })) {
-    return { seeded: false };
+    return { seeded: seedAcme().seeded };
   }
 
   repos.engagements.create(
@@ -294,6 +297,11 @@ export function seed(): { seeded: boolean } {
   });
 
   getDb(); // ensure connection materialized
+
+  // Seed the ACME sample engagement after the primary so the primary remains
+  // the default-selected engagement on first load.
+  seedAcme();
+
   return { seeded: true };
 }
 
