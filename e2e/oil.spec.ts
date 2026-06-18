@@ -72,12 +72,16 @@ test("02 · process steps: entry/action/exit, edit, RACI persona, data binding, 
   await expect(page.getByTestId("modal")).toBeHidden();
   await expect(page.getByText("E2E Bound Data")).toBeVisible();
 
-  // Create a brand-new step.
+  // Create a brand-new step, including the Pain Points field.
   await page.getByRole("button", { name: "Step", exact: true }).click();
   await page.getByTestId("field-name").fill("E2E New Step");
   await page.getByTestId("field-sequence_index").fill("9");
+  await page.getByTestId("field-pain_points").fill("E2E pain text for this step");
   await page.getByRole("button", { name: "Create" }).click();
   await expect(page.getByRole("button", { name: /E2E New Step/ })).toBeVisible();
+  // Pain points persist and render in the step detail.
+  await page.getByRole("button", { name: /E2E New Step/ }).click();
+  await expect(page.getByText("E2E pain text for this step")).toBeVisible();
   await page.screenshot({ path: "e2e/__screens__/02-steps.png", fullPage: true });
 });
 

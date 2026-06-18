@@ -175,6 +175,7 @@ export function seed(): { seeded: boolean } {
       name: "Inspection", sequence_index: 3,
       entry_criteria: "Machined part with traveler", action: "CMM + manual inspection vs drawing", exit_criteria: "Pass/fail dispositioned",
       cycle_time: 1, wait_time: 6, pct_complete_accurate: 60,
+      pain_points: "Single CMM-qualified inspector creates a hard bottleneck; parts queue here far longer than they take to inspect. No standardized inspection plan and dispositions are verbal, so rework loops are common.",
     }],
     ["finish", {
       name: "Finishing", sequence_index: 4,

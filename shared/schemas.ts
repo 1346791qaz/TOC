@@ -112,6 +112,11 @@ export const processStep = makeEntity({
   entry_criteria: nullableText,
   action: nullableText,
   exit_criteria: nullableText,
+  pain_points: z
+    .string()
+    .max(5000, "Pain points must be 5000 characters or fewer")
+    .nullable()
+    .default(null),
   cycle_time: nullableNumber,
   wait_time: nullableNumber,
   pct_complete_accurate: nullableNumber,

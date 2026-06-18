@@ -25,20 +25,21 @@ interface StepDef {
   cycle: number;
   wait: number;
   pca: number;
+  pain: string;
 }
 
 const STEPS: StepDef[] = [
-  { n: 1, name: "Order Intake & Validation", entry: "Customer PO received via portal / EDI", action: "Validate SKU, pricing, credit and requested date", exit: "Confirmed sales order in ERP", cycle: 0.5, wait: 0.5, pca: 88 },
-  { n: 2, name: "Demand Planning & Scheduling", entry: "Confirmed orders + rolling forecast", action: "Run MRP, release work orders, sequence the line", exit: "Released production schedule", cycle: 1, wait: 1.5, pca: 70 },
-  { n: 3, name: "Raw Material Procurement", entry: "Released WO with BOM shortages", action: "Issue POs, expedite resin and electronics", exit: "Materials on order / received", cycle: 2, wait: 4, pca: 64 },
-  { n: 4, name: "Incoming Inspection", entry: "Materials received at dock", action: "Sample-inspect resin lots and purchased parts vs spec", exit: "Materials accepted to stock", cycle: 0.5, wait: 2, pca: 58 },
-  { n: 5, name: "Injection Molding", entry: "Resin staged + mold/tool ready", action: "Mold widget housings and covers", exit: "Molded parts binned to WIP", cycle: 2, wait: 1, pca: 91 },
-  { n: 6, name: "Component Sub-Assembly", entry: "Molded parts + electronics kits", action: "Assemble PCB into housing sub-units", exit: "Sub-assemblies complete", cycle: 1.5, wait: 1.5, pca: 82 },
-  { n: 7, name: "Final Assembly", entry: "Sub-assemblies + hardware kit", action: "Final assemble widget, torque, fasten, label internally", exit: "Assembled widget", cycle: 3, wait: 6, pca: 76 },
-  { n: 8, name: "Functional Test & QA", entry: "Assembled widget + traveler", action: "Power-on, calibrate, leak / EMC checks", exit: "Pass / fail dispositioned", cycle: 1, wait: 3, pca: 54 },
-  { n: 9, name: "Packaging & Labeling", entry: "Tested, passed widget", action: "Pack, serialize, label, insert manuals", exit: "Sellable packed unit", cycle: 0.5, wait: 1, pca: 86 },
-  { n: 10, name: "Warehouse Staging", entry: "Packed units", action: "Putaway / pick / stage by order", exit: "Staged for carrier", cycle: 0.5, wait: 1, pca: 80 },
-  { n: 11, name: "Shipping & Fulfillment", entry: "Staged orders", action: "Manifest, generate BOL, load and ship", exit: "Shipped + tracking sent to customer", cycle: 0.5, wait: 0.5, pca: 93 },
+  { n: 1, name: "Order Intake & Validation", entry: "Customer PO received via portal / EDI", action: "Validate SKU, pricing, credit and requested date", exit: "Confirmed sales order in ERP", cycle: 0.5, wait: 0.5, pca: 88, pain: "Configured SKUs require manual price lookups; promised dates are guessed before the schedule exists, so commitments are often unrealistic." },
+  { n: 2, name: "Demand Planning & Scheduling", entry: "Confirmed orders + rolling forecast", action: "Run MRP, release work orders, sequence the line", exit: "Released production schedule", cycle: 1, wait: 1.5, pca: 70, pain: "The schedule lives on a whiteboard, so priorities are invisible to upstream and downstream teams. Re-sequencing after an expedite is manual and error-prone." },
+  { n: 3, name: "Raw Material Procurement", entry: "Released WO with BOM shortages", action: "Issue POs, expedite resin and electronics", exit: "Materials on order / received", cycle: 2, wait: 4, pca: 64, pain: "Single-source resin with volatile lead times. Buyers rely on tribal knowledge of supplier reliability; expedite fees are routine." },
+  { n: 4, name: "Incoming Inspection", entry: "Materials received at dock", action: "Sample-inspect resin lots and purchased parts vs spec", exit: "Materials accepted to stock", cycle: 0.5, wait: 2, pca: 58, pain: "No standardized inspection plan — the inspector improvises. Accept/reject is verbal and not recorded, so traceability breaks here." },
+  { n: 5, name: "Injection Molding", entry: "Resin staged + mold/tool ready", action: "Mold widget housings and covers", exit: "Molded parts binned to WIP", cycle: 2, wait: 1, pca: 91, pain: "Shot/cycle data is logged inconsistently by shift; scrap is hand-counted at end of shift, so true yield is unknown until later." },
+  { n: 6, name: "Component Sub-Assembly", entry: "Molded parts + electronics kits", action: "Assemble PCB into housing sub-units", exit: "Sub-assemblies complete", cycle: 1.5, wait: 1.5, pca: 82, pain: "Work-instruction revisions aren't always current at the station, leading to occasional rework when a rev changes mid-run." },
+  { n: 7, name: "Final Assembly", entry: "Sub-assemblies + hardware kit", action: "Final assemble widget, torque, fasten, label internally", exit: "Assembled widget", cycle: 3, wait: 6, pca: 76, pain: "THE CHOKE POINT. Only two builders are cross-trained; the cell idles on any absence. Torque specs live in senior builders' heads, no serialized build record is captured, and WIP stacks up in front of this step. Overtime and expedites concentrate here." },
+  { n: 8, name: "Functional Test & QA", entry: "Assembled widget + traveler", action: "Power-on, calibrate, leak / EMC checks", exit: "Pass / fail dispositioned", cycle: 1, wait: 3, pca: 54, pain: "The test program runs from one engineer's laptop — a single point of failure. Parametric results are discarded (only pass/fail kept) and the release decision is verbal." },
+  { n: 9, name: "Packaging & Labeling", entry: "Tested, passed widget", action: "Pack, serialize, label, insert manuals", exit: "Sellable packed unit", cycle: 0.5, wait: 1, pca: 86, pain: "Manual insert kitting occasionally mismatches region; serialization is solid but depends on the upstream traveler being complete." },
+  { n: 10, name: "Warehouse Staging", entry: "Packed units", action: "Putaway / pick / stage by order", exit: "Staged for carrier", cycle: 0.5, wait: 1, pca: 80, pain: "Units are occasionally mis-slotted, causing pick delays and the odd short-ship that surfaces only at the dock." },
+  { n: 11, name: "Shipping & Fulfillment", entry: "Staged orders", action: "Manifest, generate BOL, load and ship", exit: "Shipped + tracking sent to customer", cycle: 0.5, wait: 0.5, pca: 93, pain: "Mostly smooth, but late-day cutoffs mean anything that slips out of Final Assembly after 2pm waits a full day for the next carrier pickup." },
 ];
 
 interface PersonaDef {
@@ -118,6 +119,7 @@ export function seedAcme(): { seeded: boolean } {
         entry_criteria: s.entry,
         action: s.action,
         exit_criteria: s.exit,
+        pain_points: s.pain,
         cycle_time: s.cycle,
         wait_time: s.wait,
         pct_complete_accurate: s.pca,

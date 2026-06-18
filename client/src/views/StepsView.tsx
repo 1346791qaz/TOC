@@ -151,6 +151,14 @@ function StepDetail({
           <Criterion label="Action" value={step.action} />
           <Criterion label="Exit" value={step.exit_criteria} />
         </div>
+        {step.pain_points && (
+          <div className="mt-3 rounded-md border border-status-gap/40 bg-status-gap/5 p-2">
+            <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-wider text-status-gap">
+              Pain points
+            </p>
+            <p className="whitespace-pre-wrap text-sm">{step.pain_points}</p>
+          </div>
+        )}
       </Card>
 
       <StepPersonas step={step} vsId={vsId} />

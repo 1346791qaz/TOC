@@ -20,6 +20,7 @@ function step(id: string, name = "step", extra: Partial<ProcessStep> = {}): Proc
     entry_criteria: null,
     action: null,
     exit_criteria: null,
+    pain_points: null,
     cycle_time: null,
     wait_time: null,
     pct_complete_accurate: null,

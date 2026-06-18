@@ -103,6 +103,7 @@ export function EntityForm({
                 onChange={(e) => set(f.name, e.target.value)}
                 placeholder={f.placeholder}
                 required={f.required}
+                maxLength={f.maxLength}
               />
             ) : f.type === "select" ? (
               <Select

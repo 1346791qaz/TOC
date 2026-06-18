@@ -19,6 +19,7 @@ export interface FieldDef {
   required?: boolean;
   full?: boolean;
   placeholder?: string;
+  maxLength?: number;
 }
 
 export const engagementFields: FieldDef[] = [
@@ -52,6 +53,14 @@ export const processStepFields: FieldDef[] = [
   { name: "entry_criteria", label: "Entry criteria", type: "textarea", full: true },
   { name: "action", label: "Action", type: "textarea", full: true },
   { name: "exit_criteria", label: "Exit criteria", type: "textarea", full: true },
+  {
+    name: "pain_points",
+    label: "Pain points",
+    type: "textarea",
+    full: true,
+    maxLength: 5000,
+    placeholder: "What hurts at this step? (up to 5000 characters)",
+  },
 ];
 
 export const dataElementFields: FieldDef[] = [
