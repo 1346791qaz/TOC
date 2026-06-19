@@ -13,9 +13,12 @@ import type { ConstraintBadge, OilNodeData } from "./buildGraph";
 // ---------------------------------------------------------------------------
 // "Attached cells" layout: process steps form a left-to-right spine; each
 // step's personas and bound data hang directly beneath it as compact cells.
-// Personas are grouped by Function/Dept with a faded department backdrop. This
-// is the layout used by the "Full OIL" mode — no force layout needed, so the
-// cells stay glued to their step.
+//
+// Each step column sits in a faded "domain lane" colored by the domain that
+// OWNS the step — i.e. the Function/Dept of the step's executor persona. This
+// shows which domain owns which process and its data; non-executor personas
+// (approver/consulted/informed) still appear in the column, inside the owner's
+// lane, and carry a small marker in their own domain's color.
 // ---------------------------------------------------------------------------
 
 const STEP_W = 220;
@@ -26,11 +29,12 @@ const CELL_X = (STEP_W - CELL_W) / 2;
 const PERSONA_H = 48;
 const DATA_H = 44;
 const CELL_GAP = 8;
-const SECTION_GAP = 20;
-const DEPT_PAD = 8;
-const DEPT_GROUP_GAP = 10;
+const SECTION_GAP = 18;
+const DOMAIN_PAD = 12;
 
 const BINDING_ORDER: Record<string, number> = { entry: 0, action: 1, exit: 2 };
+const ROLE_ORDER: Record<string, number> = { executor: 0, approver: 1, consulted: 2, informed: 3 };
+const UNOWNED = "Unowned";
 
 const EDGE_STYLE: Record<string, { dash?: string; color: string }> = {
   sequence: { color: "hsl(215 20% 45%)" },
@@ -39,20 +43,36 @@ const EDGE_STYLE: Record<string, { dash?: string; color: string }> = {
   dependency: { dash: "8 3", color: "hsl(38 92% 55%)" },
 };
 
-/** Deterministic department hue so the same dept is always the same color. */
-export function deptHue(dept: string): number {
-  let h = 0;
-  for (let i = 0; i < dept.length; i++) h = (h * 31 + dept.charCodeAt(i)) % 360;
-  return h;
+export interface DomainColor {
+  border: string;
+  bg: string;
+  text: string;
 }
-export function deptColors(dept: string): { bg: string; border: string; text: string } {
-  const hue = deptHue(dept);
-  return {
-    bg: `hsla(${hue}, 45%, 24%, 0.45)`,
-    border: `hsl(${hue} 50% 50%)`,
-    text: `hsl(${hue} 65% 80%)`,
-  };
+
+/**
+ * Assign every distinct domain a unique, evenly-spaced hue (no two domains
+ * share a color). Sorted so assignment is stable for a given set of domains.
+ */
+export function buildDomainPalette(domains: string[]): Map<string, DomainColor> {
+  const distinct = [...new Set(domains)].sort((a, b) => a.localeCompare(b));
+  const map = new Map<string, DomainColor>();
+  const n = Math.max(distinct.length, 1);
+  distinct.forEach((d, i) => {
+    const hue = Math.round((i * 360) / n);
+    map.set(d, {
+      border: `hsl(${hue} 62% 55%)`,
+      bg: `hsla(${hue}, 55%, 32%, 0.16)`,
+      text: `hsl(${hue} 70% 80%)`,
+    });
+  });
+  return map;
 }
+
+const GRAY: DomainColor = {
+  border: "hsl(215 12% 45%)",
+  bg: "hsla(215, 12%, 40%, 0.12)",
+  text: "hsl(215 14% 70%)",
+};
 
 export interface AttachedInput {
   steps: ProcessStep[];
@@ -71,6 +91,12 @@ export function buildAttachedGraph(input: AttachedInput): {
   const { steps, personas, dataElements, stepPersonas, constraints, edges, layers } = input;
 
   const personaById = new Map(personas.map((p) => [p.id, p]));
+  const domainOf = (p: Persona | undefined): string => p?.function ?? "Unassigned";
+
+  // Unique color per persona domain (no repetition across domains).
+  const palette = buildDomainPalette(personas.map((p) => domainOf(p)));
+  const colorFor = (domain: string): DomainColor =>
+    domain === UNOWNED ? GRAY : palette.get(domain) ?? GRAY;
 
   // Constraint badges per target id.
   const badges = new Map<string, ConstraintBadge>();
@@ -84,13 +110,28 @@ export function buildAttachedGraph(input: AttachedInput): {
   }
   const badgeFor = (id: string) => (layers.constraints ? badges.get(id) : undefined);
 
-  const bgNodes: Node<OilNodeData>[] = []; // department backdrops (render behind)
+  const laneNodes: Node<OilNodeData>[] = []; // domain lanes (render behind)
   const cellNodes: Node<OilNodeData>[] = [];
 
   const sorted = [...steps].sort((a, b) => a.sequence_index - b.sequence_index);
 
   sorted.forEach((step, i) => {
     const x = i * COL_SPACING;
+
+    const assigns = stepPersonas
+      .filter((sp) => sp.step_id === step.id)
+      .map((sp) => ({ sp, p: personaById.get(sp.persona_id) }))
+      .filter((a): a is { sp: StepPersona; p: Persona } => !!a.p)
+      .sort(
+        (a, b) =>
+          (ROLE_ORDER[a.sp.role_on_step] ?? 9) - (ROLE_ORDER[b.sp.role_on_step] ?? 9) ||
+          a.p.name.localeCompare(b.p.name),
+      );
+
+    // Owning domain = the executor's Function/Dept (fallback: Unowned).
+    const executor = assigns.find((a) => a.sp.role_on_step === "executor");
+    const ownerDomain = executor ? domainOf(executor.p) : UNOWNED;
+    const ownerColor = colorFor(ownerDomain);
 
     cellNodes.push({
       id: `step:${step.id}`,
@@ -109,71 +150,31 @@ export function buildAttachedGraph(input: AttachedInput): {
 
     let cursorY = STEP_H + SECTION_GAP;
 
-    // ---- persona cells, grouped by department --------------------------
     if (layers.personas) {
-      const assigns = stepPersonas
-        .filter((sp) => sp.step_id === step.id)
-        .map((sp) => ({ sp, p: personaById.get(sp.persona_id) }))
-        .filter((a): a is { sp: StepPersona; p: Persona } => !!a.p)
-        .sort(
-          (a, b) =>
-            (a.p.function ?? "Unassigned").localeCompare(b.p.function ?? "Unassigned") ||
-            a.p.name.localeCompare(b.p.name),
-        );
-
-      let gi = 0;
-      while (gi < assigns.length) {
-        const dept = assigns[gi].p.function ?? "Unassigned";
-        const col = deptColors(dept);
-        const groupTop = cursorY;
-
-        while (gi < assigns.length && (assigns[gi].p.function ?? "Unassigned") === dept) {
-          const { sp, p } = assigns[gi];
-          cellNodes.push({
-            id: `pcell:${step.id}:${p.id}`,
-            type: "personaCell",
-            position: { x: x + CELL_X, y: cursorY },
-            zIndex: 2,
-            data: {
-              label: p.name,
-              nodeKind: "persona",
-              entityId: p.id,
-              dimmed: false,
-              constraint: badgeFor(p.id),
-              persona: p,
-              roleOnStep: sp.role_on_step,
-              deptColor: col.border,
-            },
-          });
-          cursorY += PERSONA_H + CELL_GAP;
-          gi++;
-        }
-
-        const groupBottom = cursorY - CELL_GAP;
-        bgNodes.push({
-          id: `deptbg:${step.id}:${dept}`,
-          type: "deptBg",
-          position: { x: x + CELL_X - DEPT_PAD, y: groupTop - DEPT_PAD },
-          style: { width: CELL_W + DEPT_PAD * 2, height: groupBottom - groupTop + DEPT_PAD * 2 },
-          selectable: false,
-          draggable: false,
-          zIndex: 0,
+      for (const { sp, p } of assigns) {
+        const own = colorFor(domainOf(p));
+        cellNodes.push({
+          id: `pcell:${step.id}:${p.id}`,
+          type: "personaCell",
+          position: { x: x + CELL_X, y: cursorY },
+          zIndex: 2,
           data: {
-            label: dept,
+            label: p.name,
             nodeKind: "persona",
-            entityId: "",
+            entityId: p.id,
             dimmed: false,
-            isBackground: true,
-            deptColor: col.border,
-            deptBg: col.bg,
+            constraint: badgeFor(p.id),
+            persona: p,
+            roleOnStep: sp.role_on_step,
+            deptColor: own.border,
+            isExecutor: sp.role_on_step === "executor",
           },
         });
-        cursorY += DEPT_GROUP_GAP;
+        cursorY += PERSONA_H + CELL_GAP;
       }
-      if (assigns.length) cursorY += SECTION_GAP - DEPT_GROUP_GAP;
+      if (assigns.length) cursorY += SECTION_GAP - CELL_GAP;
     }
 
-    // ---- data cells ----------------------------------------------------
     if (layers.data) {
       const ds = dataElements
         .filter((d) => d.step_id === step.id)
@@ -188,17 +189,32 @@ export function buildAttachedGraph(input: AttachedInput): {
           type: "dataCell",
           position: { x: x + CELL_X, y: cursorY },
           zIndex: 2,
-          data: {
-            label: d.name,
-            nodeKind: "data_element",
-            entityId: d.id,
-            dimmed: false,
-            data: d,
-          },
+          data: { label: d.name, nodeKind: "data_element", entityId: d.id, dimmed: false, data: d },
         });
         cursorY += DATA_H + CELL_GAP;
       }
     }
+
+    // One domain-ownership lane wrapping the whole column (step + cells).
+    const contentBottom = Math.max(STEP_H, cursorY - CELL_GAP);
+    laneNodes.push({
+      id: `lane:${step.id}`,
+      type: "deptBg",
+      position: { x: x - DOMAIN_PAD, y: -DOMAIN_PAD },
+      style: { width: STEP_W + DOMAIN_PAD * 2, height: contentBottom + DOMAIN_PAD * 2 },
+      selectable: false,
+      draggable: false,
+      zIndex: 0,
+      data: {
+        label: ownerDomain,
+        nodeKind: "step",
+        entityId: "",
+        dimmed: false,
+        isBackground: true,
+        deptColor: ownerColor.border,
+        deptBg: ownerColor.bg,
+      },
+    });
   });
 
   // Step-to-step dependency edges (cells are attached spatially, no edges).
@@ -217,6 +233,6 @@ export function buildAttachedGraph(input: AttachedInput): {
     });
   }
 
-  // Background nodes first so they paint behind the cells.
-  return { nodes: [...bgNodes, ...cellNodes], edges: outEdges };
+  // Lanes first so they paint behind the cells.
+  return { nodes: [...laneNodes, ...cellNodes], edges: outEdges };
 }

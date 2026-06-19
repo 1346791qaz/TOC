@@ -31,6 +31,7 @@ export interface OilNodeData extends Record<string, unknown> {
   deptColor?: string;
   deptBg?: string;
   isBackground?: boolean;
+  isExecutor?: boolean;
 }
 
 export const NODE_SIZES: Record<FlowNodeType, { width: number; height: number }> = {

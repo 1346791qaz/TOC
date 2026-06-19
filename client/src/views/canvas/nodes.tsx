@@ -166,11 +166,20 @@ export function PersonaCell({ data, selected }: NodeProps) {
     >
       <ConstraintMarker data={d} />
       <div className="flex items-center gap-1">
+        {d.isExecutor && (
+          <span
+            title="Executor — owns this step"
+            style={{ background: color }}
+            className="inline-block h-2 w-2 shrink-0 rounded-full"
+          />
+        )}
         <User size={11} style={{ color }} />
         <span className="truncate text-xs font-medium">{d.label}</span>
       </div>
       <div className="mt-0.5 flex items-center gap-1">
-        {d.roleOnStep && <Badge tone="info">{d.roleOnStep}</Badge>}
+        {d.roleOnStep && (
+          <Badge tone={d.isExecutor ? "accent" : "info"}>{d.roleOnStep}</Badge>
+        )}
         <span className="truncate text-[10px] text-muted-foreground">{d.persona?.function}</span>
       </div>
     </div>
