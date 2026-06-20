@@ -26,17 +26,22 @@ interface StepDef {
   wait: number;
   pca: number;
   pain: string;
+  // Step-level data landscape (optional).
+  sys?: string;
+  dbs?: string;
+  tbls?: string;
+  etl?: string;
 }
 
 const STEPS: StepDef[] = [
-  { n: 1, name: "Order Intake & Validation", entry: "Customer PO received via portal / EDI", action: "Validate SKU, pricing, credit and requested date", exit: "Confirmed sales order in ERP", cycle: 0.5, wait: 0.5, pca: 88, pain: "Configured SKUs require manual price lookups; promised dates are guessed before the schedule exists, so commitments are often unrealistic." },
-  { n: 2, name: "Demand Planning & Scheduling", entry: "Confirmed orders + rolling forecast", action: "Run MRP, release work orders, sequence the line", exit: "Released production schedule", cycle: 1, wait: 1.5, pca: 70, pain: "The schedule lives on a whiteboard, so priorities are invisible to upstream and downstream teams. Re-sequencing after an expedite is manual and error-prone." },
-  { n: 3, name: "Raw Material Procurement", entry: "Released WO with BOM shortages", action: "Issue POs, expedite resin and electronics", exit: "Materials on order / received", cycle: 2, wait: 4, pca: 64, pain: "Single-source resin with volatile lead times. Buyers rely on tribal knowledge of supplier reliability; expedite fees are routine." },
-  { n: 4, name: "Incoming Inspection", entry: "Materials received at dock", action: "Sample-inspect resin lots and purchased parts vs spec", exit: "Materials accepted to stock", cycle: 0.5, wait: 2, pca: 58, pain: "No standardized inspection plan — the inspector improvises. Accept/reject is verbal and not recorded, so traceability breaks here." },
-  { n: 5, name: "Injection Molding", entry: "Resin staged + mold/tool ready", action: "Mold widget housings and covers", exit: "Molded parts binned to WIP", cycle: 2, wait: 1, pca: 91, pain: "Shot/cycle data is logged inconsistently by shift; scrap is hand-counted at end of shift, so true yield is unknown until later." },
-  { n: 6, name: "Component Sub-Assembly", entry: "Molded parts + electronics kits", action: "Assemble PCB into housing sub-units", exit: "Sub-assemblies complete", cycle: 1.5, wait: 1.5, pca: 82, pain: "Work-instruction revisions aren't always current at the station, leading to occasional rework when a rev changes mid-run." },
-  { n: 7, name: "Final Assembly", entry: "Sub-assemblies + hardware kit", action: "Final assemble widget, torque, fasten, label internally", exit: "Assembled widget", cycle: 3, wait: 6, pca: 76, pain: "THE CHOKE POINT. Only two builders are cross-trained; the cell idles on any absence. Torque specs live in senior builders' heads, no serialized build record is captured, and WIP stacks up in front of this step. Overtime and expedites concentrate here." },
-  { n: 8, name: "Functional Test & QA", entry: "Assembled widget + traveler", action: "Power-on, calibrate, leak / EMC checks", exit: "Pass / fail dispositioned", cycle: 1, wait: 3, pca: 54, pain: "The test program runs from one engineer's laptop — a single point of failure. Parametric results are discarded (only pass/fail kept) and the release decision is verbal." },
+  { n: 1, name: "Order Intake & Validation", entry: "Customer PO received via portal / EDI", action: "Validate SKU, pricing, credit and requested date", exit: "Confirmed sales order in ERP", cycle: 0.5, wait: 0.5, pca: 88, pain: "Configured SKUs require manual price lookups; promised dates are guessed before the schedule exists, so commitments are often unrealistic.", sys: "SAP ECC, EDI gateway, customer portal", dbs: "SAP ECC", tbls: "VBAK, VBAP, KNA1", etl: "EDI inbound IDoc → SAP (job EDI_ORDERS_IN)" },
+  { n: 2, name: "Demand Planning & Scheduling", entry: "Confirmed orders + rolling forecast", action: "Run MRP, release work orders, sequence the line", exit: "Released production schedule", cycle: 1, wait: 1.5, pca: 70, pain: "The schedule lives on a whiteboard, so priorities are invisible to upstream and downstream teams. Re-sequencing after an expedite is manual and error-prone.", sys: "SAP PP, Excel, floor whiteboard", dbs: "SAP ECC, planning spreadsheet", tbls: "RESB, PLAF, AFKO", etl: "MRP run (RMMRP000); forecast loaded manually from Excel" },
+  { n: 3, name: "Raw Material Procurement", entry: "Released WO with BOM shortages", action: "Issue POs, expedite resin and electronics", exit: "Materials on order / received", cycle: 2, wait: 4, pca: 64, pain: "Single-source resin with volatile lead times. Buyers rely on tribal knowledge of supplier reliability; expedite fees are routine.", sys: "SAP MM, supplier portal, email", dbs: "SAP ECC", tbls: "EKKO, EKPO, EBAN", etl: "Supplier ASN → SAP (job ASN_IMPORT)" },
+  { n: 4, name: "Incoming Inspection", entry: "Materials received at dock", action: "Sample-inspect resin lots and purchased parts vs spec", exit: "Materials accepted to stock", cycle: 0.5, wait: 2, pca: 58, pain: "No standardized inspection plan — the inspector improvises. Accept/reject is verbal and not recorded, so traceability breaks here.", sys: "QMS (paper-backed), SAP QM", dbs: "QMS, SAP ECC", tbls: "QALS, QAVE", etl: "—" },
+  { n: 5, name: "Injection Molding", entry: "Resin staged + mold/tool ready", action: "Mold widget housings and covers", exit: "Molded parts binned to WIP", cycle: 2, wait: 1, pca: 91, pain: "Shot/cycle data is logged inconsistently by shift; scrap is hand-counted at end of shift, so true yield is unknown until later.", sys: "MES, manual scrap tally", dbs: "MES (SQL Server)", tbls: "mes.production_runs, mes.scrap", etl: "MES → EDW hourly (job MES_PROD_LOAD)" },
+  { n: 6, name: "Component Sub-Assembly", entry: "Molded parts + electronics kits", action: "Assemble PCB into housing sub-units", exit: "Sub-assemblies complete", cycle: 1.5, wait: 1.5, pca: 82, pain: "Work-instruction revisions aren't always current at the station, leading to occasional rework when a rev changes mid-run.", sys: "PLM, MES", dbs: "PLM, MES", tbls: "plm.work_instructions, mes.subassembly", etl: "—" },
+  { n: 7, name: "Final Assembly", entry: "Sub-assemblies + hardware kit", action: "Final assemble widget, torque, fasten, label internally", exit: "Assembled widget", cycle: 3, wait: 6, pca: 76, pain: "THE CHOKE POINT. Only two builders are cross-trained; the cell idles on any absence. Torque specs live in senior builders' heads, no serialized build record is captured, and WIP stacks up in front of this step. Overtime and expedites concentrate here.", sys: "Paper traveler, MES (partial), label printer", dbs: "MES (partial); as-built not stored anywhere", tbls: "mes.assembly (cycle only)", etl: "None for build records — gap" },
+  { n: 8, name: "Functional Test & QA", entry: "Assembled widget + traveler", action: "Power-on, calibrate, leak / EMC checks", exit: "Pass / fail dispositioned", cycle: 1, wait: 3, pca: 54, pain: "The test program runs from one engineer's laptop — a single point of failure. Parametric results are discarded (only pass/fail kept) and the release decision is verbal.", sys: "Test rig (engineer laptop), QMS", dbs: "QMS; parametric data not persisted", tbls: "qms.test_results (pass/fail only)", etl: "Manual CSV export, ad hoc" },
   { n: 9, name: "Packaging & Labeling", entry: "Tested, passed widget", action: "Pack, serialize, label, insert manuals", exit: "Sellable packed unit", cycle: 0.5, wait: 1, pca: 86, pain: "Manual insert kitting occasionally mismatches region; serialization is solid but depends on the upstream traveler being complete." },
   { n: 10, name: "Warehouse Staging", entry: "Packed units", action: "Putaway / pick / stage by order", exit: "Staged for carrier", cycle: 0.5, wait: 1, pca: 80, pain: "Units are occasionally mis-slotted, causing pick delays and the odd short-ship that surfaces only at the dock." },
   { n: 11, name: "Shipping & Fulfillment", entry: "Staged orders", action: "Manifest, generate BOL, load and ship", exit: "Shipped + tracking sent to customer", cycle: 0.5, wait: 0.5, pca: 93, pain: "Mostly smooth, but late-day cutoffs mean anything that slips out of Final Assembly after 2pm waits a full day for the next carrier pickup." },
@@ -123,6 +128,10 @@ export function seedAcme(): { seeded: boolean } {
         cycle_time: s.cycle,
         wait_time: s.wait,
         pct_complete_accurate: s.pca,
+        data_source_systems: s.sys ?? null,
+        data_databases: s.dbs ?? null,
+        data_tables: s.tbls ?? null,
+        data_etl_jobs: s.etl ?? null,
       },
       S(s.n),
     );
@@ -156,17 +165,21 @@ export function seedAcme(): { seeded: boolean } {
     src?: string;
     key?: boolean;
     notes?: string;
+    desc?: string; // business name / description
+    tbl?: string; // table or view
+    fld?: string; // field name
+    ex?: string; // example value
   };
   const data: DE[] = [
-    { step: 1, name: "Customer PO", bind: "entry", presence: "present", type: "EDI doc", src: "EDI / Portal", key: true },
-    { step: 1, name: "Credit check", bind: "action", presence: "partial", type: "status", src: "ERP", notes: "Sometimes overridden verbally" },
-    { step: 1, name: "Promised ship date", bind: "exit", presence: "partial", type: "date", src: "ERP", key: true, notes: "Often a placeholder, refined later" },
-    { step: 2, name: "Demand forecast", bind: "entry", presence: "partial", type: "number", src: "Excel", key: true, notes: "Maintained in a spreadsheet, weekly" },
-    { step: 2, name: "MRP output", bind: "action", presence: "present", type: "report", src: "ERP" },
-    { step: 2, name: "Production schedule", bind: "exit", presence: "missing", type: "plan", src: "Whiteboard", key: true, notes: "Lives on the floor whiteboard; not in any system" },
-    { step: 3, name: "Supplier lead times", bind: "entry", presence: "partial", type: "table", src: "Email", notes: "Tribal; varies by buyer" },
-    { step: 3, name: "Purchase orders", bind: "action", presence: "present", type: "PO", src: "ERP" },
-    { step: 3, name: "Material certs", bind: "exit", presence: "missing", type: "doc", src: "Supplier portal", key: true, notes: "Arrive late; block traceability" },
+    { step: 1, name: "Customer PO", bind: "entry", presence: "present", type: "string(10)", src: "EDI / Portal", key: true, desc: "Customer purchase order number", tbl: "VBAK", fld: "BSTNK", ex: "PO-2026-04417" },
+    { step: 1, name: "Credit check", bind: "action", presence: "partial", type: "char(1)", src: "SAP FI", notes: "Sometimes overridden verbally", desc: "Credit release status", tbl: "VBUK", fld: "CMGST", ex: "A (approved)" },
+    { step: 1, name: "Promised ship date", bind: "exit", presence: "partial", type: "date", src: "SAP SD", key: true, notes: "Often a placeholder, refined later", desc: "Confirmed delivery date committed to customer", tbl: "VBAP", fld: "EDATU", ex: "2026-05-12" },
+    { step: 2, name: "Demand forecast", bind: "entry", presence: "partial", type: "decimal", src: "Excel", key: true, notes: "Maintained in a spreadsheet, weekly", desc: "Weekly demand forecast by SKU", tbl: "forecast.xlsx", fld: "qty_wk", ex: "1,250" },
+    { step: 2, name: "MRP output", bind: "action", presence: "present", type: "report", src: "SAP PP", desc: "Planned orders from MRP", tbl: "PLAF", fld: "GSMNG", ex: "320" },
+    { step: 2, name: "Production schedule", bind: "exit", presence: "missing", type: "plan", src: "Whiteboard", key: true, notes: "Lives on the floor whiteboard; not in any system", desc: "Sequenced build schedule for the line", tbl: "(none — whiteboard)", fld: "—", ex: "Line 2: WO-8841, WO-8839…" },
+    { step: 3, name: "Supplier lead times", bind: "entry", presence: "partial", type: "int (days)", src: "Email", notes: "Tribal; varies by buyer", desc: "Expected supplier lead time", tbl: "EINE", fld: "PLIFZ", ex: "21" },
+    { step: 3, name: "Purchase orders", bind: "action", presence: "present", type: "string(10)", src: "SAP MM", desc: "Purchase order to supplier", tbl: "EKKO", fld: "EBELN", ex: "4500091234" },
+    { step: 3, name: "Material certs", bind: "exit", presence: "missing", type: "doc", src: "Supplier portal", key: true, notes: "Arrive late; block traceability", desc: "Material certificate of analysis", tbl: "(supplier portal)", fld: "cert_id", ex: "COA-RS-22918" },
     { step: 4, name: "Inspection plan", bind: "entry", presence: "missing", type: "doc", src: "Paper", key: true, notes: "No standard plan; inspector improvises" },
     { step: 4, name: "Sample results", bind: "action", presence: "partial", type: "report", src: "QMS", notes: "Stored locally, not linked to lot" },
     { step: 4, name: "Disposition record", bind: "exit", presence: "missing", type: "status", src: "None", key: true, notes: "Accept/reject is verbal" },
@@ -175,12 +188,12 @@ export function seedAcme(): { seeded: boolean } {
     { step: 5, name: "Scrap count", bind: "exit", presence: "missing", type: "number", src: "Manual tally", notes: "Counted by hand, end of shift" },
     { step: 6, name: "Electronics kit list", bind: "entry", presence: "present", type: "BOM", src: "ERP" },
     { step: 6, name: "Work instructions", bind: "action", presence: "partial", type: "doc", src: "PLM", notes: "Rev not always current at station" },
-    { step: 7, name: "Assembly traveler", bind: "entry", presence: "partial", type: "paper", src: "Paper", key: true, notes: "Handwritten; frequently incomplete" },
-    { step: 7, name: "Torque spec", bind: "action", presence: "missing", type: "spec", src: "Tribal knowledge", key: true, notes: "Known only to senior builders" },
-    { step: 7, name: "As-built record", bind: "exit", presence: "missing", type: "record", src: "None", key: true, notes: "No serialized build record captured" },
-    { step: 7, name: "Labor hours", bind: "action", presence: "missing", type: "number", src: "Manual", notes: "Not captured per unit" },
-    { step: 8, name: "Test program", bind: "entry", presence: "missing", type: "software", src: "Engineer's PC", key: true, notes: "Single copy on one laptop; undocumented" },
-    { step: 8, name: "Test results", bind: "action", presence: "partial", type: "report", src: "QMS", key: true, notes: "Pass/fail captured; parametric data lost" },
+    { step: 7, name: "Assembly traveler", bind: "entry", presence: "partial", type: "paper", src: "Paper", key: true, notes: "Handwritten; frequently incomplete", desc: "Build traveler accompanying the unit", tbl: "(paper)", fld: "—", ex: "Traveler #A-5521" },
+    { step: 7, name: "Torque spec", bind: "action", presence: "missing", type: "N·m", src: "Tribal knowledge", key: true, notes: "Known only to senior builders", desc: "Fastener torque specification", tbl: "(none)", fld: "—", ex: "2.4 N·m ±0.2" },
+    { step: 7, name: "As-built record", bind: "exit", presence: "missing", type: "record", src: "None", key: true, notes: "No serialized build record captured", desc: "Serialized as-built configuration", tbl: "(none — gap)", fld: "—", ex: "SN→component map" },
+    { step: 7, name: "Labor hours", bind: "action", presence: "missing", type: "decimal", src: "Manual", notes: "Not captured per unit", desc: "Direct labor hours per unit", tbl: "(none)", fld: "—", ex: "0.85" },
+    { step: 8, name: "Test program", bind: "entry", presence: "missing", type: "software", src: "Engineer's PC", key: true, notes: "Single copy on one laptop; undocumented", desc: "Functional test sequence/program", tbl: "(laptop file)", fld: "—", ex: "widget_fct_v7.seq" },
+    { step: 8, name: "Test results", bind: "action", presence: "partial", type: "report", src: "QMS", key: true, notes: "Pass/fail captured; parametric data lost", desc: "Functional test outcome", tbl: "qms.test_results", fld: "result", ex: "PASS" },
     { step: 8, name: "Calibration cert", bind: "entry", presence: "partial", type: "cert", src: "QMS" },
     { step: 8, name: "Final disposition", bind: "exit", presence: "missing", type: "status", src: "None", key: true, notes: "Release decision is verbal" },
     { step: 9, name: "Serial / label data", bind: "action", presence: "present", type: "record", src: "WMS", key: true },
@@ -193,9 +206,13 @@ export function seedAcme(): { seeded: boolean } {
     repos.data_elements.create({
       step_id: S(d.step),
       name: d.name,
+      business_description: d.desc ?? null,
       binding_point: d.bind,
       data_type: d.type ?? null,
       source_system: d.src ?? null,
+      table_or_view: d.tbl ?? null,
+      field_name: d.fld ?? null,
+      example_value: d.ex ?? null,
       presence: d.presence,
       quality_notes: d.notes ?? null,
       is_key: d.key ?? false,
@@ -346,8 +363,8 @@ export function seedAcme(): { seeded: boolean } {
   }
   repos.step_personas.create({ step_id: FS(5), persona_id: P(8), role_on_step: "consulted" });
   // A couple of data gaps inside the constraint.
-  repos.data_elements.create({ step_id: FS(3), name: "Torque values", binding_point: "action", data_type: "number", source_system: "None", presence: "missing", quality_notes: "Not captured per unit.", is_key: true });
-  repos.data_elements.create({ step_id: FS(5), name: "As-built record", binding_point: "exit", data_type: "record", source_system: "None", presence: "missing", quality_notes: "Verbal sign-off only.", is_key: true });
+  repos.data_elements.create({ step_id: FS(3), name: "Torque values", business_description: "Measured fastener torque per joint", binding_point: "action", data_type: "N·m", source_system: "None (driver not networked)", table_or_view: "(none — gap)", field_name: "—", example_value: "2.41, 2.38, 2.45", presence: "missing", quality_notes: "Not captured per unit.", is_key: true });
+  repos.data_elements.create({ step_id: FS(5), name: "As-built record", business_description: "Serialized as-built configuration + sign-off", binding_point: "exit", data_type: "record", source_system: "None", table_or_view: "(none — gap)", field_name: "—", example_value: "SN 22918 → builder JD", presence: "missing", quality_notes: "Verbal sign-off only.", is_key: true });
   // Sequence spine among the sub-steps (drives the drilled-in canvas).
   for (let i = 1; i < subSteps.length; i++) {
     repos.flow_edges.create({

@@ -70,8 +70,12 @@ client/src/
 
 `Engagement → Value Stream → { Personas, Process Steps, Data Elements,
 Constraints } + explicit dependency edges`. Process steps carry
-entry/action/exit criteria and Lean timings; data elements bind to a step's
-entry/action/exit with a `presence` (present/partial/missing) flag; the
+entry/action/exit criteria, Lean timings, pain points, and a step-level **data
+landscape** (source systems, databases, tables, ETL jobs). Steps nest
+recursively via `parent_step_id` (drill into a step to map its sub-steps). Data
+elements bind to a step's entry/action/exit with a `presence`
+(present/partial/missing) flag and a granular data-point detail (business
+description, source/target table-or-view + field name, type, example value); the
 `constraints` table covers the whole flow-blocker family (constraint / risk /
 breakdown / pain point / seam) with the Five Focusing Steps lifecycle
 (`identified → exploit → subordinate → elevate → broken`).
@@ -114,7 +118,7 @@ name,role_title,function,scope_level,responsibilities,authority_notes
 
 **data_elements** (resolved to a step by `step_name`)
 ```
-step_name,name,binding_point,presence,data_type,source_system,is_key,quality_notes
+step_name,name,business_description,binding_point,presence,source_system,table_or_view,field_name,data_type,example_value,is_key,quality_notes
 ```
 
 `scope_level` ∈ local|stream|system · `binding_point` ∈ entry|action|exit ·

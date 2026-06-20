@@ -100,9 +100,13 @@ export function importStructured(
       repos.data_elements.create({
         step_id: stepId,
         name,
+        business_description: str(r.business_description),
         binding_point: (str(r.binding_point) as never) ?? "entry",
         data_type: str(r.data_type),
         source_system: str(r.source_system),
+        table_or_view: str(r.table_or_view),
+        field_name: str(r.field_name),
+        example_value: str(r.example_value),
         presence: (str(r.presence) as never) ?? "present",
         quality_notes: str(r.quality_notes),
         is_key: bool(r.is_key),

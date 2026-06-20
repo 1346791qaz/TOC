@@ -1,3 +1,3 @@
-step_name,name,binding_point,presence,data_type,source_system,is_key,quality_notes
-Inspection,Gauge calibration record,entry,partial,doc,Calibration log,true,Sometimes expired
-Pack & Ship,Certificate of Conformance,exit,missing,doc,None,true,Not generated automatically
+step_name,name,business_description,binding_point,presence,source_system,table_or_view,field_name,data_type,example_value,is_key,quality_notes
+Inspection,Gauge calibration record,Calibration status of the gauge used,entry,partial,Calibration log,cal.gauges,status,string,VALID,true,Sometimes expired
+Pack & Ship,Certificate of Conformance,Shipped-unit conformance certificate,exit,missing,None,(none),,doc,COC-22918,true,Not generated automatically

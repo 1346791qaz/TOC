@@ -40,25 +40,43 @@ export function DataView({ vsId }: { vsId: string }) {
       {rows.length === 0 ? (
         <EmptyHint>No data elements bound yet.</EmptyHint>
       ) : (
-        <Table columns={["Step", "Binding", "Element", "Type", "Source", "Key", "Presence", ""]}>
-          {rows.map((d) => (
-            <Tr key={d.id}>
-              <Td className="text-muted-foreground">{stepById.get(d.step_id)?.name ?? "—"}</Td>
-              <Td>
-                <Badge>{d.binding_point}</Badge>
-              </Td>
-              <Td className="font-medium">{d.name}</Td>
-              <Td className="text-xs text-muted-foreground">{d.data_type ?? "—"}</Td>
-              <Td className="text-xs text-muted-foreground">{d.source_system ?? "—"}</Td>
-              <Td>{d.is_key ? <Badge tone="accent">key</Badge> : "—"}</Td>
-              <Td>
-                <Badge tone={presenceTone[d.presence]}>{d.presence}</Badge>
-              </Td>
-              <Td>
-                <RowActions entityKey="data_elements" id={d.id} onEdit={() => setEditing(d)} />
-              </Td>
-            </Tr>
-          ))}
+        <Table columns={["Step", "Binding", "Element", "Source / Target", "Table.Field", "Type", "Key", "Presence", ""]}>
+          {rows.map((d) => {
+            const loc = [d.table_or_view, d.field_name].filter(Boolean).join(".");
+            return (
+              <Tr key={d.id}>
+                <Td className="text-muted-foreground">{stepById.get(d.step_id)?.name ?? "—"}</Td>
+                <Td>
+                  <Badge>{d.binding_point === "entry" ? "entry · src" : `${d.binding_point} · tgt`}</Badge>
+                </Td>
+                <Td className="font-medium">
+                  {d.name}
+                  {d.business_description && (
+                    <span className="block max-w-xs truncate text-[10px] font-normal text-muted-foreground">
+                      {d.business_description}
+                    </span>
+                  )}
+                </Td>
+                <Td className="text-xs text-muted-foreground">{d.source_system ?? "—"}</Td>
+                <Td className="mono text-xs text-accent">{loc || "—"}</Td>
+                <Td className="text-xs text-muted-foreground">
+                  {d.data_type ?? "—"}
+                  {d.example_value && (
+                    <span className="block truncate text-[10px] text-muted-foreground/70">
+                      e.g. {d.example_value}
+                    </span>
+                  )}
+                </Td>
+                <Td>{d.is_key ? <Badge tone="accent">key</Badge> : "—"}</Td>
+                <Td>
+                  <Badge tone={presenceTone[d.presence]}>{d.presence}</Badge>
+                </Td>
+                <Td>
+                  <RowActions entityKey="data_elements" id={d.id} onEdit={() => setEditing(d)} />
+                </Td>
+              </Tr>
+            );
+          })}
         </Table>
       )}
 

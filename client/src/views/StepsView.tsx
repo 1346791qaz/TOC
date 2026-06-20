@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowRight, Layers, Pencil, Plus, X } from "lucide-react";
+import { ArrowRight, Database, Layers, Pencil, Plus, X } from "lucide-react";
 import type { DataElement, Persona, ProcessStep, StepPersona, ValueStream } from "@shared/schemas";
 import { RACI_ROLES } from "@shared/enums";
 import { useCreate, useList, useSoftDelete } from "@/lib/queries";
@@ -198,10 +198,44 @@ function StepDetail({
         )}
       </Card>
 
+      <DataLandscape step={step} />
       <StepPersonas step={step} vsId={vsId} />
       <StepData step={step} />
       <StepSubSteps step={step} vsId={vsId} allSteps={allSteps} onDrill={onDrill} onDrillChild={onDrillChild} />
     </div>
+  );
+}
+
+function DataLandscape({ step }: { step: ProcessStep }) {
+  const rows: [string, string | null][] = [
+    ["Source system(s)", step.data_source_systems],
+    ["Database(s)", step.data_databases],
+    ["Table(s)", step.data_tables],
+    ["ETL jobs", step.data_etl_jobs],
+  ];
+  const hasAny = rows.some(([, v]) => v);
+  return (
+    <Card>
+      <p className="mb-2 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-accent">
+        <Database size={11} /> Data landscape
+      </p>
+      {hasAny ? (
+        <div className="grid grid-cols-2 gap-2">
+          {rows.map(([label, value]) => (
+            <div key={label}>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                {label}
+              </p>
+              <p className="mono text-xs">{value || <span className="text-muted-foreground">—</span>}</p>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          No source systems / databases / tables / ETL captured. Add via Edit.
+        </p>
+      )}
+    </Card>
   );
 }
 

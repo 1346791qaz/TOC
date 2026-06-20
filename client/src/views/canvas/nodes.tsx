@@ -157,67 +157,94 @@ export function DeptBackground({ data }: NodeProps) {
   );
 }
 
+// Persona cell: SOLID border + a filled domain-color chip with a person icon.
 export function PersonaCell({ data, selected }: NodeProps) {
   const d = data as OilNodeData;
   const color = d.deptColor ?? "hsl(270 55% 62%)";
   return (
     <div
       data-testid="oilnode-persona"
-      className="relative box-border rounded-md border bg-surface-raised px-2 py-1"
+      className="relative box-border flex items-stretch gap-1.5 overflow-hidden rounded-md border-2 border-solid px-0 py-0"
       style={{
         width: 200,
         height: 48,
         borderColor: color,
-        background: "hsl(220 26% 13%)",
+        background: "hsl(222 28% 14%)",
         outline: selected ? "2px solid hsl(38 92% 52%)" : undefined,
       }}
     >
       <ConstraintMarker data={d} />
-      <div className="flex items-center gap-1">
-        {d.isExecutor && (
-          <span
-            title="Executor — owns this step"
-            style={{ background: color }}
-            className="inline-block h-2 w-2 shrink-0 rounded-full"
-          />
-        )}
-        <User size={11} style={{ color }} />
-        <span className="truncate text-xs font-medium">{d.label}</span>
+      {/* Filled person chip — the persona signature. */}
+      <div
+        className="flex w-7 shrink-0 items-center justify-center"
+        style={{ background: color, color: "hsl(222 30% 10%)" }}
+      >
+        <User size={14} />
       </div>
-      <div className="mt-0.5 flex items-center gap-1">
-        {d.roleOnStep && (
-          <Badge tone={d.isExecutor ? "accent" : "info"}>{d.roleOnStep}</Badge>
-        )}
-        <span className="truncate text-[10px] text-muted-foreground">{d.persona?.function}</span>
+      <div className="min-w-0 flex-1 py-1 pr-1.5">
+        <div className="flex items-center gap-1">
+          {d.isExecutor && (
+            <span
+              title="Executor — owns this step"
+              style={{ background: color }}
+              className="inline-block h-2 w-2 shrink-0 rounded-full"
+            />
+          )}
+          <span className="truncate text-xs font-semibold">{d.label}</span>
+        </div>
+        <div className="mt-0.5 flex items-center gap-1">
+          {d.roleOnStep && (
+            <Badge tone={d.isExecutor ? "accent" : "info"}>{d.roleOnStep}</Badge>
+          )}
+          <span className="truncate text-[10px] text-muted-foreground">{d.persona?.function}</span>
+        </div>
       </div>
     </div>
   );
 }
 
+// Data cell: DASHED cyan/amber border + a database chip + monospace location.
+// Deliberately distinct from the solid, person-chipped persona cells.
 export function DataCell({ data, selected }: NodeProps) {
   const d = data as OilNodeData;
   const de = d.data;
   const warn = de && de.presence !== "present";
+  const accent = warn ? "hsl(38 92% 55%)" : "hsl(190 80% 55%)";
+  const loc =
+    de && (de.table_or_view || de.field_name)
+      ? [de.table_or_view, de.field_name].filter(Boolean).join(".")
+      : null;
   return (
     <div
       data-testid="oilnode-data"
-      className="relative box-border rounded border px-2 py-1"
+      className="relative box-border flex items-stretch gap-1.5 overflow-hidden rounded-md border border-dashed px-0 py-0"
       style={{
         width: 200,
-        height: 44,
-        borderColor: warn ? "hsl(38 92% 55%)" : "hsl(190 70% 50%)",
-        background: "hsl(190 40% 10%)",
+        height: 48,
+        borderColor: accent,
+        background: "hsl(196 42% 9%)",
         outline: selected ? "2px solid hsl(38 92% 52%)" : undefined,
       }}
     >
-      <div className="flex items-center gap-1">
-        <Database size={11} style={{ color: "hsl(190 70% 60%)" }} />
-        <span className="truncate text-xs font-medium">{d.label}</span>
+      <div
+        className="flex w-7 shrink-0 items-center justify-center"
+        style={{ background: accent, color: "hsl(200 40% 8%)" }}
+      >
+        <Database size={13} />
       </div>
-      <div className="mt-0.5 flex items-center gap-1">
-        {de && <Badge>{de.binding_point}</Badge>}
-        {de && <Badge tone={presenceTone[de.presence]}>{de.presence}</Badge>}
-        {de?.is_key && <Badge tone="accent">key</Badge>}
+      <div className="min-w-0 flex-1 py-1 pr-1.5">
+        <div className="flex items-center gap-1">
+          <span className="truncate text-xs font-semibold">{d.label}</span>
+        </div>
+        {loc ? (
+          <p className="mono truncate text-[10px] text-accent">{loc}</p>
+        ) : (
+          <div className="mt-0.5 flex items-center gap-1">
+            {de && <Badge>{de.binding_point}</Badge>}
+            {de && <Badge tone={presenceTone[de.presence]}>{de.presence}</Badge>}
+            {de?.is_key && <Badge tone="accent">key</Badge>}
+          </div>
+        )}
       </div>
     </div>
   );

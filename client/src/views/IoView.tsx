@@ -11,7 +11,7 @@ const TEMPLATES: Record<string, string> = {
     "name,sequence_index,entry_criteria,action,exit_criteria,cycle_time,wait_time,pct_complete_accurate",
   personas: "name,role_title,function,scope_level,responsibilities,authority_notes",
   data_elements:
-    "step_name,name,binding_point,presence,data_type,source_system,is_key,quality_notes",
+    "step_name,name,business_description,binding_point,presence,source_system,table_or_view,field_name,data_type,example_value,is_key,quality_notes",
 };
 
 export function IoView({ engagementId, vsId }: { engagementId: string; vsId: string }) {

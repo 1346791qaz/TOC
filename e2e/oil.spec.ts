@@ -117,8 +117,12 @@ test("04 · data elements: list and create with step picker", async ({ page }) =
   await page.getByTestId("field-step_id").selectOption({ label: "Order Intake" });
   await page.getByTestId("field-name").fill("E2E DataView Elem");
   await page.getByTestId("field-presence").selectOption("partial");
+  // New granular data-point fields (table/view + field name).
+  await page.getByTestId("field-table_or_view").fill("VBAP");
+  await page.getByTestId("field-field_name").fill("ZZFIELD");
   await page.getByRole("button", { name: "Create" }).click();
   await expect(page.getByText("E2E DataView Elem")).toBeVisible();
+  await expect(page.getByText("VBAP.ZZFIELD")).toBeVisible();
 });
 
 test("05 · data gap report aggregates missing/partial/key", async ({ page }) => {

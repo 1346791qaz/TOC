@@ -61,15 +61,24 @@ export const processStepFields: FieldDef[] = [
     maxLength: 5000,
     placeholder: "What hurts at this step? (up to 5000 characters)",
   },
+  // Step-level data landscape.
+  { name: "data_source_systems", label: "Source system(s)", type: "text", full: true, placeholder: "e.g. SAP, Data Warehouse, MES, hardcopy, spreadsheet" },
+  { name: "data_databases", label: "Database(s)", type: "text", full: true, placeholder: "e.g. SAP ECC, EDW (Snowflake)" },
+  { name: "data_tables", label: "Table(s)", type: "text", full: true, placeholder: "e.g. VBAP, MARA, fact_orders" },
+  { name: "data_etl_jobs", label: "Related ETL jobs", type: "textarea", full: true, placeholder: "e.g. nightly SAP→EDW extract (job ODS_LOAD_ORDERS)" },
 ];
 
 export const dataElementFields: FieldDef[] = [
   { name: "step_id", label: "Process step", type: "select", optionsKey: "steps", required: true, full: true },
-  { name: "name", label: "Data element", type: "text", required: true, full: true },
-  { name: "binding_point", label: "Binding point", type: "select", options: BINDING_POINTS },
-  { name: "presence", label: "Presence", type: "select", options: PRESENCE },
-  { name: "data_type", label: "Data type", type: "text" },
+  { name: "name", label: "Data element (short name)", type: "text", required: true, full: true },
+  { name: "business_description", label: "Business name / description", type: "textarea", full: true },
+  { name: "binding_point", label: "Binding point (entry = source · action/exit = target)", type: "select", options: BINDING_POINTS, full: true },
   { name: "source_system", label: "Source system", type: "text" },
+  { name: "table_or_view", label: "Table / view", type: "text" },
+  { name: "field_name", label: "Field name", type: "text" },
+  { name: "data_type", label: "Type", type: "text" },
+  { name: "example_value", label: "Example value", type: "text" },
+  { name: "presence", label: "Presence", type: "select", options: PRESENCE },
   { name: "is_key", label: "Key data component", type: "boolean" },
   { name: "quality_notes", label: "Quality notes", type: "textarea", full: true },
 ];

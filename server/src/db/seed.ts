@@ -176,6 +176,7 @@ export function seed(): { seeded: boolean } {
       entry_criteria: "Machined part with traveler", action: "CMM + manual inspection vs drawing", exit_criteria: "Pass/fail dispositioned",
       cycle_time: 1, wait_time: 6, pct_complete_accurate: 60,
       pain_points: "Single CMM-qualified inspector creates a hard bottleneck; parts queue here far longer than they take to inspect. No standardized inspection plan and dispositions are verbal, so rework loops are common.",
+      data_source_systems: "CMM software, paper traveler, QMS", data_databases: "CMM local store, QMS", data_tables: "qms.inspection_results", data_etl_jobs: "None — CMM results stored locally, not linked to job",
     }],
     ["finish", {
       name: "Finishing", sequence_index: 4,

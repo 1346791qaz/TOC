@@ -125,6 +125,11 @@ export const processStep = makeEntity({
   cycle_time: nullableNumber,
   wait_time: nullableNumber,
   pct_complete_accurate: nullableNumber,
+  // Step-level data landscape (higher-level than individual data points).
+  data_source_systems: nullableText,
+  data_databases: nullableText,
+  data_tables: nullableText,
+  data_etl_jobs: nullableText,
 });
 export type ProcessStep = z.infer<typeof processStep.record>;
 
@@ -144,9 +149,15 @@ export type StepPersona = z.infer<typeof stepPersona.record>;
 export const dataElement = makeEntity({
   step_id: z.string().uuid(),
   name: z.string().min(1, "Name is required"),
+  business_description: nullableText,
   binding_point: bindingPointSchema.default("entry"),
   data_type: nullableText,
   source_system: nullableText,
+  // Physical location of the data point: source table/view on entry, target on
+  // action/exit (per binding_point).
+  table_or_view: nullableText,
+  field_name: nullableText,
+  example_value: nullableText,
   presence: presenceSchema.default("present"),
   quality_notes: nullableText,
   is_key: z.boolean().default(false),
