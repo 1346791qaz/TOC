@@ -1,5 +1,5 @@
 import { Handle, Position, type NodeProps } from "@xyflow/react";
-import { AlertTriangle, Database, User, Workflow } from "lucide-react";
+import { AlertTriangle, Database, Layers, User, Workflow } from "lucide-react";
 import { fmtNum } from "@/lib/utils";
 import { presenceTone } from "@/lib/display";
 import { Badge } from "@/components/ui/primitives";
@@ -54,11 +54,16 @@ export function StepNode({ data, selected }: NodeProps) {
         <span className="mono">W {fmtNum(s?.wait_time)}</span>
         <span className="mono">{fmtNum(s?.pct_complete_accurate, "%")}</span>
       </div>
-      <div className="mt-1 flex gap-1">
+      <div className="mt-1 flex items-center gap-1">
         {queue && <Badge tone="gap">queue</Badge>}
         {missing > 0 && (
           <Badge tone="critical">
             <AlertTriangle size={9} /> {missing}
+          </Badge>
+        )}
+        {!!d.subStepCount && (
+          <Badge tone="accent" className="ml-auto" >
+            <Layers size={9} /> {d.subStepCount} sub
           </Badge>
         )}
       </div>

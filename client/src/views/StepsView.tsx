@@ -1,16 +1,21 @@
 import { useState } from "react";
-import { ArrowRight, Pencil, Plus, X } from "lucide-react";
-import type { DataElement, Persona, ProcessStep, StepPersona } from "@shared/schemas";
+import { ArrowRight, Layers, Pencil, Plus, X } from "lucide-react";
+import type { DataElement, Persona, ProcessStep, StepPersona, ValueStream } from "@shared/schemas";
 import { RACI_ROLES } from "@shared/enums";
 import { useCreate, useList, useSoftDelete } from "@/lib/queries";
 import { dataElementFields, processStepFields } from "@/lib/entityConfig";
+import { useUi } from "@/store";
 import { fmtNum } from "@/lib/utils";
 import { presenceTone, titleCase } from "@/lib/display";
+import { buildStepPath, childCountByParent, stepsAtLevel } from "./canvas/hierarchy";
 import { ViewShell, EmptyHint } from "@/components/ViewShell";
+import { StepBreadcrumb } from "@/components/StepBreadcrumb";
 import { Badge, Button, Card, Select } from "@/components/ui/primitives";
 import { EntityModalForm } from "@/components/EntityModalForm";
 
 export function StepsView({ vsId }: { vsId: string }) {
+  const { stepPath, setStepPath } = useUi();
+  const valueStreams = useList<ValueStream>("value_streams");
   const steps = useList<ProcessStep>("process_steps", {
     where: { value_stream_id: vsId },
     orderBy: "sequence_index ASC",
@@ -20,21 +25,36 @@ export function StepsView({ vsId }: { vsId: string }) {
   const [creating, setCreating] = useState(false);
   const del = useSoftDelete("process_steps");
 
-  const list = steps.data ?? [];
+  const allSteps = steps.data ?? [];
+  const parentStepId = stepPath.at(-1)?.id ?? null;
+  const list = stepsAtLevel(allSteps, parentStepId);
+  const childCount = childCountByParent(allSteps);
   const selected = list.find((s) => s.id === selectedId) ?? list[0] ?? null;
+  const vsName = valueStreams.data?.find((v) => v.id === vsId)?.name ?? "Value stream";
+  const drillInto = (stepId: string) => {
+    setStepPath(buildStepPath(stepId, allSteps));
+    setSelectedId(null);
+  };
 
   return (
     <ViewShell
       title="Process Steps"
-      subtitle="The value-stream spine — each step carries entry / action / exit criteria."
+      subtitle={parentStepId ? "Sub-steps of the selected step." : "The value-stream spine — each step carries entry / action / exit criteria."}
       actions={
         <Button size="sm" onClick={() => setCreating(true)}>
-          <Plus size={14} /> Step
+          <Plus size={14} /> {parentStepId ? "Sub-step" : "Step"}
         </Button>
       }
     >
+      <div className="mb-3">
+        <StepBreadcrumb valueStreamName={vsName} />
+      </div>
       {list.length === 0 ? (
-        <EmptyHint>No process steps yet. Add the first step to build the spine.</EmptyHint>
+        <EmptyHint>
+          {parentStepId
+            ? "No sub-steps here yet. Add one to map this step's internals."
+            : "No process steps yet. Add the first step to build the spine."}
+        </EmptyHint>
       ) : (
         <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] gap-4">
           {/* Spine list */}
@@ -58,7 +78,15 @@ export function StepsView({ vsId }: { vsId: string }) {
                     queue
                   </Badge>
                 )}
-                {i < list.length - 1 && <ArrowRight size={12} className="ml-auto opacity-30" />}
+                {!!childCount.get(s.id) && (
+                  <Badge
+                    tone="accent"
+                    className={s.wait_time != null && s.cycle_time != null && s.wait_time > s.cycle_time ? "" : "ml-auto"}
+                  >
+                    <Layers size={9} /> {childCount.get(s.id)}
+                  </Badge>
+                )}
+                {i < list.length - 1 && <ArrowRight size={12} className="opacity-30" />}
               </button>
             ))}
           </div>
@@ -69,7 +97,10 @@ export function StepsView({ vsId }: { vsId: string }) {
               key={selected.id}
               step={selected}
               vsId={vsId}
+              allSteps={allSteps}
               onEdit={() => setEditing(selected)}
+              onDrill={() => drillInto(selected.id)}
+              onDrillChild={(childId) => drillInto(childId)}
               onDelete={() => {
                 if (confirm("Move step to Trash?")) {
                   del.mutate(selected.id);
@@ -87,9 +118,9 @@ export function StepsView({ vsId }: { vsId: string }) {
         open={creating}
         onClose={() => setCreating(false)}
         entityKey="process_steps"
-        title="New Process Step"
+        title={parentStepId ? "New Sub-step" : "New Process Step"}
         fields={processStepFields}
-        extra={{ value_stream_id: vsId }}
+        extra={{ value_stream_id: vsId, parent_step_id: parentStepId }}
       />
       {editing && (
         <EntityModalForm
@@ -119,12 +150,18 @@ function Criterion({ label, value }: { label: string; value: string | null }) {
 function StepDetail({
   step,
   vsId,
+  allSteps,
   onEdit,
+  onDrill,
+  onDrillChild,
   onDelete,
 }: {
   step: ProcessStep;
   vsId: string;
+  allSteps: ProcessStep[];
   onEdit: () => void;
+  onDrill: () => void;
+  onDrillChild: (childId: string) => void;
   onDelete: () => void;
 }) {
   return (
@@ -163,7 +200,76 @@ function StepDetail({
 
       <StepPersonas step={step} vsId={vsId} />
       <StepData step={step} />
+      <StepSubSteps step={step} vsId={vsId} allSteps={allSteps} onDrill={onDrill} onDrillChild={onDrillChild} />
     </div>
+  );
+}
+
+function StepSubSteps({
+  step,
+  vsId,
+  allSteps,
+  onDrill,
+  onDrillChild,
+}: {
+  step: ProcessStep;
+  vsId: string;
+  allSteps: ProcessStep[];
+  onDrill: () => void;
+  onDrillChild: (childId: string) => void;
+}) {
+  const [creating, setCreating] = useState(false);
+  const children = stepsAtLevel(allSteps, step.id).sort(
+    (a, b) => a.sequence_index - b.sequence_index,
+  );
+
+  return (
+    <Card>
+      <div className="mb-2 flex items-center justify-between">
+        <p className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          <Layers size={11} /> Sub-steps ({children.length})
+        </p>
+        <div className="flex gap-1.5">
+          {children.length > 0 && (
+            <Button size="sm" variant="outline" onClick={onDrill}>
+              Open level
+            </Button>
+          )}
+          <Button size="sm" variant="subtle" onClick={() => setCreating(true)}>
+            <Plus size={12} /> Add sub-step
+          </Button>
+        </div>
+      </div>
+      <div className="space-y-1">
+        {children.map((c) => (
+          <button
+            key={c.id}
+            onClick={() => onDrillChild(c.id)}
+            className="flex w-full items-center gap-2 rounded bg-muted/40 px-2 py-1 text-left text-sm hover:bg-muted"
+          >
+            <span className="mono grid h-5 w-5 place-items-center rounded bg-muted text-[10px]">
+              {c.sequence_index}
+            </span>
+            <span className="truncate font-medium">{c.name}</span>
+            <ArrowRight size={12} className="ml-auto opacity-40" />
+          </button>
+        ))}
+        {children.length === 0 && (
+          <p className="text-xs text-muted-foreground">
+            No sub-steps. Break this step into its detailed procedure.
+          </p>
+        )}
+      </div>
+
+      <EntityModalForm
+        open={creating}
+        onClose={() => setCreating(false)}
+        entityKey="process_steps"
+        title="New Sub-step"
+        fields={processStepFields}
+        extra={{ value_stream_id: vsId, parent_step_id: step.id }}
+      />
+    </Card>
   );
 }
 

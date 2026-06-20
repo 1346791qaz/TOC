@@ -15,6 +15,7 @@ function step(id: string, name = "step", extra: Partial<ProcessStep> = {}): Proc
     ...base,
     id,
     value_stream_id: "vs",
+    parent_step_id: null,
     name,
     sequence_index: 0,
     entry_criteria: null,

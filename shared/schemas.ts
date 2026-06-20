@@ -107,8 +107,13 @@ export type Persona = z.infer<typeof persona.record>;
 // ---------------------------------------------------------------------------
 export const processStep = makeEntity({
   value_stream_id: z.string().uuid(),
+  // Self-referencing hierarchy: null = top level, otherwise a sub-step of the
+  // referenced step. Enables recursive drill-down into a step's sub-steps.
+  parent_step_id: z.string().uuid().nullable().default(null),
   name: z.string().min(1, "Name is required"),
-  sequence_index: z.number().int().default(0),
+  // Tolerate null/empty (e.g. an unspecified order on create) by coercing to 0,
+  // since this column is non-nullable with a default.
+  sequence_index: z.preprocess((v) => (v == null ? 0 : v), z.number().int()).default(0),
   entry_criteria: nullableText,
   action: nullableText,
   exit_criteria: nullableText,

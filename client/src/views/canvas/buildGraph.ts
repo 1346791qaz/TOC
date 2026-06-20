@@ -32,6 +32,8 @@ export interface OilNodeData extends Record<string, unknown> {
   deptBg?: string;
   isBackground?: boolean;
   isExecutor?: boolean;
+  // Hierarchy: number of direct sub-steps (drives the drill-in affordance).
+  subStepCount?: number;
 }
 
 export const NODE_SIZES: Record<FlowNodeType, { width: number; height: number }> = {
@@ -51,6 +53,8 @@ export interface GraphInput {
   edges: FlowEdge[];
   layoutMode: LayoutMode;
   layers: { personas: boolean; data: boolean; constraints: boolean };
+  /** parent_step_id -> number of direct sub-steps, for the drill-in marker. */
+  childCount?: Map<string, number>;
 }
 
 const EDGE_STYLE: Record<string, { dash?: string; color: string }> = {
@@ -61,7 +65,7 @@ const EDGE_STYLE: Record<string, { dash?: string; color: string }> = {
 };
 
 export function buildGraph(input: GraphInput): { nodes: Node<OilNodeData>[]; edges: Edge[] } {
-  const { steps, personas, dataElements, stepPersonas, constraints, edges, layoutMode, layers } =
+  const { steps, personas, dataElements, stepPersonas, constraints, edges, layoutMode, layers, childCount } =
     input;
 
   const showPersonas = layoutMode === "full" && layers.personas;
@@ -123,6 +127,7 @@ export function buildGraph(input: GraphInput): { nodes: Node<OilNodeData>[]; edg
         dimmed: dimmed(id),
         constraint: showConstraints ? badges.get(s.id) : undefined,
         step: s,
+        subStepCount: childCount?.get(s.id) ?? 0,
       },
     });
   }

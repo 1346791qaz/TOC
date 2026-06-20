@@ -4,6 +4,7 @@ import type { Constraint, Persona, ProcessStep } from "@shared/schemas";
 import { NAV } from "@/App";
 import { useUi, type ViewKey } from "@/store";
 import { useList } from "@/lib/queries";
+import { buildStepPath } from "@/views/canvas/hierarchy";
 import { Modal } from "@/components/ui/modal";
 
 interface Cmd {
@@ -14,7 +15,7 @@ interface Cmd {
 }
 
 export function CommandPalette() {
-  const { commandOpen, setCommandOpen, valueStreamId, setView, select } = useUi();
+  const { commandOpen, setCommandOpen, valueStreamId, setView, select, setStepPath } = useUi();
   const [q, setQ] = useState("");
 
   const steps = useList<ProcessStep>(
@@ -54,6 +55,8 @@ export function CommandPalette() {
       label: s.name,
       hint: "Step",
       run: () => {
+        // Drill to the step's parent level so it appears in the list, then select it.
+        setStepPath(s.parent_step_id ? buildStepPath(s.parent_step_id, steps.data ?? []) : []);
         select({ key: "process_steps", id: s.id });
         go("steps");
       },

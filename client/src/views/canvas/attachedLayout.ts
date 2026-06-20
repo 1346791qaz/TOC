@@ -83,13 +83,16 @@ export interface AttachedInput {
   constraints: Constraint[];
   edges: FlowEdge[];
   layers: { personas: boolean; data: boolean; constraints: boolean };
+  /** parent_step_id -> number of direct sub-steps, for the drill-in marker. */
+  childCount?: Map<string, number>;
 }
 
 export function buildAttachedGraph(input: AttachedInput): {
   nodes: Node<OilNodeData>[];
   edges: Edge[];
 } {
-  const { steps, personas, dataElements, stepPersonas, constraints, edges, layers } = input;
+  const { steps, personas, dataElements, stepPersonas, constraints, edges, layers, childCount } =
+    input;
 
   const personaById = new Map(personas.map((p) => [p.id, p]));
   const domainOf = (p: Persona | undefined): string => p?.function ?? "Unassigned";
@@ -155,6 +158,7 @@ export function buildAttachedGraph(input: AttachedInput): {
         dimmed: false,
         constraint: badgeFor(step.id),
         step,
+        subStepCount: childCount?.get(step.id) ?? 0,
       },
     });
 

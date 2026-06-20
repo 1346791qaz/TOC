@@ -311,3 +311,42 @@ test("13 · structured import and engagement export", async ({ page }) => {
   expect(download.suggestedFilename()).toContain("engagement-");
   await page.screenshot({ path: "e2e/__screens__/13-io.png", fullPage: true });
 });
+
+test("14 · steps: add a sub-step and drill into the level", async ({ page }) => {
+  await gotoApp(page);
+  await nav(page, "Process Steps");
+
+  // Select Inspection and add a sub-step under it.
+  await page.getByRole("button", { name: /Inspection/ }).click();
+  await page.getByRole("button", { name: "Add sub-step" }).first().click();
+  await expect(page.getByTestId("modal")).toBeVisible();
+  await page.getByTestId("field-name").fill("E2E Substep");
+  await page.getByRole("button", { name: "Create" }).click();
+  await expect(page.getByTestId("modal")).toBeHidden();
+
+  // Open the sub-level; the sub-step is now the level's spine.
+  await page.getByRole("button", { name: "Open level" }).click();
+  await expect(page.getByTestId("step-breadcrumb")).toContainText("Inspection");
+  await expect(page.getByRole("button", { name: /E2E Substep/ })).toBeVisible();
+
+  // Breadcrumb back to the top level.
+  await page.getByTestId("step-breadcrumb").getByRole("button").first().click();
+  await expect(page.getByRole("button", { name: /Inspection/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /E2E Substep/ })).toBeHidden();
+});
+
+test("15 · canvas: drill into a step's sub-steps via double-click", async ({ page }) => {
+  await gotoApp(page);
+  await nav(page, "OIL Graph");
+  await expect(page.getByTestId("oilnode-step").first()).toBeVisible({ timeout: 15_000 });
+
+  // Inspection now has the sub-step created in test 14 — drill into it.
+  await page.getByTestId("oilnode-step").filter({ hasText: "Inspection" }).dblclick();
+  await expect(page.getByTestId("step-breadcrumb")).toContainText("Inspection");
+  await expect(page.getByTestId("oilnode-step").filter({ hasText: "E2E Substep" })).toBeVisible();
+  await page.screenshot({ path: "e2e/__screens__/15-drill.png", fullPage: true });
+
+  // Pop back to the top level via the breadcrumb root.
+  await page.getByTestId("step-breadcrumb").getByRole("button").first().click();
+  await expect(page.getByTestId("oilnode-step").filter({ hasText: "Order Intake" })).toBeVisible();
+});

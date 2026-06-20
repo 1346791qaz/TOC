@@ -1,4 +1,4 @@
-import { X } from "lucide-react";
+import { Layers, X } from "lucide-react";
 import type { EntityKey } from "@shared/schemas";
 import { useUpdate } from "@/lib/queries";
 import { dataElementFields, personaFields, processStepFields } from "@/lib/entityConfig";
@@ -21,12 +21,22 @@ function configFor(node: OilNodeData): { key: EntityKey; fields: FieldDef[]; rec
   return null;
 }
 
-export function DetailDrawer({ node, onClose }: { node: OilNodeData | null; onClose: () => void }) {
+export function DetailDrawer({
+  node,
+  onClose,
+  onDrill,
+}: {
+  node: OilNodeData | null;
+  onClose: () => void;
+  onDrill?: (stepId: string) => void;
+}) {
   const cfg = node ? configFor(node) : null;
   // Hook order is stable: the key only changes which entity we PATCH.
   const updateForKey = useUpdate((cfg?.key ?? "process_steps") as EntityKey);
 
   if (!node || !cfg) return null;
+
+  const isStep = node.nodeKind === "step";
 
   return (
     <aside
@@ -44,6 +54,18 @@ export function DetailDrawer({ node, onClose }: { node: OilNodeData | null; onCl
           <X size={16} />
         </Button>
       </div>
+      {isStep && onDrill && (
+        <div className="border-b border-border p-3">
+          <Button
+            variant="outline"
+            className="w-full"
+            onClick={() => onDrill(node.entityId)}
+          >
+            <Layers size={14} /> Drill into sub-steps
+            {!!node.subStepCount && <span className="opacity-70">({node.subStepCount})</span>}
+          </Button>
+        </div>
+      )}
       <div className="flex-1 overflow-y-auto p-3">
         <EntityForm
           key={cfg.record.id as string}

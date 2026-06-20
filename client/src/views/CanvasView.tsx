@@ -13,6 +13,7 @@ import {
   type Edge,
   type Node,
 } from "@xyflow/react";
+import { Plus } from "lucide-react";
 import { EDGE_TYPES, type EdgeType, type FlowNodeType } from "@shared/enums";
 import type {
   Constraint,
@@ -21,14 +22,19 @@ import type {
   Persona,
   ProcessStep,
   StepPersona,
+  ValueStream,
 } from "@shared/schemas";
 import { useCreate, useList, useSoftDelete } from "@/lib/queries";
 import { useUi, type LayoutMode } from "@/store";
 import { cn } from "@/lib/utils";
 import { titleCase } from "@/lib/display";
+import { processStepFields } from "@/lib/entityConfig";
 import { Button, Select } from "@/components/ui/primitives";
+import { StepBreadcrumb } from "@/components/StepBreadcrumb";
+import { EntityModalForm } from "@/components/EntityModalForm";
 import { buildGraph, type OilNodeData } from "./canvas/buildGraph";
 import { buildAttachedGraph } from "./canvas/attachedLayout";
+import { buildStepPath, childCountByParent, stepsAtLevel } from "./canvas/hierarchy";
 import { layoutElk } from "./canvas/layout";
 import { nodeTypes } from "./canvas/nodes";
 import { DetailDrawer } from "./canvas/DetailDrawer";
@@ -40,9 +46,10 @@ const LAYOUT_MODES: { value: LayoutMode; label: string }[] = [
 ];
 
 function CanvasInner({ vsId }: { vsId: string }) {
-  const { layoutMode, layers, setLayoutMode, toggleLayer } = useUi();
+  const { layoutMode, layers, stepPath, setLayoutMode, toggleLayer, setStepPath } = useUi();
   const { fitView } = useReactFlow();
 
+  const valueStreams = useList<ValueStream>("value_streams");
   const steps = useList<ProcessStep>("process_steps", {
     where: { value_stream_id: vsId },
     orderBy: "sequence_index ASC",
@@ -57,8 +64,20 @@ function CanvasInner({ vsId }: { vsId: string }) {
   const [rfEdges, setRfEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [selected, setSelected] = useState<OilNodeData | null>(null);
   const [newEdgeType, setNewEdgeType] = useState<EdgeType>("dependency");
+  const [addingStep, setAddingStep] = useState(false);
   const createEdge = useCreate<FlowEdge>("flow_edges");
   const deleteEdge = useSoftDelete("flow_edges");
+
+  const allSteps = useMemo(() => steps.data ?? [], [steps.data]);
+  const parentStepId = stepPath.at(-1)?.id ?? null;
+  const levelSteps = useMemo(() => stepsAtLevel(allSteps, parentStepId), [allSteps, parentStepId]);
+  const childCount = useMemo(() => childCountByParent(allSteps), [allSteps]);
+  const vsName = valueStreams.data?.find((v) => v.id === vsId)?.name ?? "Value stream";
+
+  const drillInto = (stepId: string) => {
+    setStepPath(buildStepPath(stepId, allSteps));
+    setSelected(null);
+  };
 
   // Manually add cross-cutting dependency edges by dragging between node handles.
   const onConnect = (c: Connection) => {
@@ -82,31 +101,30 @@ function CanvasInner({ vsId }: { vsId: string }) {
     }
   };
 
-  const stepIds = useMemo(
-    () => new Set((steps.data ?? []).map((s) => s.id)),
-    [steps.data],
-  );
+  const levelStepIds = useMemo(() => new Set(levelSteps.map((s) => s.id)), [levelSteps]);
 
   const ready =
     steps.data && personas.data && allData.data && allStepPersonas.data && constraints.data && edges.data;
 
   useEffect(() => {
     if (!ready) return;
-    const dataElements = (allData.data ?? []).filter((d) => stepIds.has(d.step_id));
-    const stepPersonas = (allStepPersonas.data ?? []).filter((sp) => stepIds.has(sp.step_id));
+    // Only the cells/edges belonging to the current drill level are shown.
+    const dataElements = (allData.data ?? []).filter((d) => levelStepIds.has(d.step_id));
+    const stepPersonas = (allStepPersonas.data ?? []).filter((sp) => levelStepIds.has(sp.step_id));
     const refit = () => setTimeout(() => fitView({ padding: 0.2, duration: 300 }), 50);
 
     // "Full OIL" uses the attached-cell layout (personas/data hang under their
     // step, dept swimlanes behind personas) — computed synchronously, no elk.
     if (layoutMode === "full") {
       const graph = buildAttachedGraph({
-        steps: steps.data ?? [],
+        steps: levelSteps,
         personas: personas.data ?? [],
         dataElements,
         stepPersonas,
         constraints: constraints.data ?? [],
         edges: edges.data ?? [],
         layers,
+        childCount,
       });
       setNodes(graph.nodes);
       setRfEdges(graph.edges);
@@ -116,7 +134,7 @@ function CanvasInner({ vsId }: { vsId: string }) {
 
     // Spine / constraint-focus keep the elk layered layout.
     const graph = buildGraph({
-      steps: steps.data ?? [],
+      steps: levelSteps,
       personas: personas.data ?? [],
       dataElements,
       stepPersonas,
@@ -124,6 +142,7 @@ function CanvasInner({ vsId }: { vsId: string }) {
       edges: edges.data ?? [],
       layoutMode,
       layers,
+      childCount,
     });
     let cancelled = false;
     layoutElk(graph.nodes, graph.edges).then((positioned) => {
@@ -136,99 +155,142 @@ function CanvasInner({ vsId }: { vsId: string }) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, steps.data, personas.data, allData.data, allStepPersonas.data, constraints.data, edges.data, layoutMode, layers]);
+  }, [ready, levelSteps, personas.data, allData.data, allStepPersonas.data, constraints.data, edges.data, layoutMode, layers, childCount]);
+
+  const isEmptyLevel = ready && levelSteps.length === 0;
 
   return (
     <div className="flex h-full">
-      <div className="relative min-w-0 flex-1">
-        {/* Toolbar */}
-        <div className="absolute left-3 top-3 z-10 flex flex-col gap-2">
-          <div className="flex gap-1 rounded-md border border-border bg-surface/90 p-1 backdrop-blur">
-            {LAYOUT_MODES.map((m) => (
-              <Button
-                key={m.value}
-                size="sm"
-                variant={layoutMode === m.value ? "default" : "ghost"}
-                onClick={() => setLayoutMode(m.value)}
-              >
-                {m.label}
-              </Button>
-            ))}
-          </div>
-          {layoutMode === "full" && (
-            <div className="flex gap-1 rounded-md border border-border bg-surface/90 p-1 backdrop-blur">
-              {(["personas", "data", "constraints"] as const).map((l) => (
-                <button
-                  key={l}
-                  onClick={() => toggleLayer(l)}
-                  className={cn(
-                    "rounded px-2 py-1 text-xs capitalize transition-colors",
-                    layers[l] ? "bg-muted text-foreground" : "text-muted-foreground",
-                  )}
-                >
-                  {l}
-                </button>
-              ))}
-            </div>
-          )}
-          {layoutMode === "constraint_focus" && (
-            <div className="rounded-md border border-border bg-surface/90 px-2 py-1 text-[11px] text-muted-foreground backdrop-blur">
-              Highlighting the system constraint and everything subordinate (downstream).
-            </div>
-          )}
-          <div className="flex items-center gap-1.5 rounded-md border border-border bg-surface/90 p-1 text-[11px] text-muted-foreground backdrop-blur">
-            <span className="pl-1">Drag to link · new edge:</span>
-            <Select
-              value={newEdgeType}
-              onChange={(e) => setNewEdgeType(e.target.value as EdgeType)}
-              className="h-7 w-32"
-            >
-              {EDGE_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {titleCase(t)}
-                </option>
-              ))}
-            </Select>
-          </div>
+      <div className="flex min-w-0 flex-1 flex-col">
+        {/* Breadcrumb / add bar */}
+        <div className="flex shrink-0 items-center gap-2 border-b border-border bg-surface px-3 py-1.5">
+          <StepBreadcrumb valueStreamName={vsName} />
+          <Button size="sm" variant="subtle" className="ml-auto" onClick={() => setAddingStep(true)}>
+            <Plus size={13} /> {parentStepId ? "Sub-step" : "Step"}
+          </Button>
         </div>
 
-        <ReactFlow
-          nodes={nodes}
-          edges={rfEdges}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onConnect={onConnect}
-          onEdgesDelete={onEdgesDelete}
-          nodeTypes={nodeTypes}
-          onNodeClick={(_, n) => {
-            if (n.type === "deptBg") return; // department backdrop, not selectable
-            setSelected(n.data as OilNodeData);
-          }}
-          onPaneClick={() => setSelected(null)}
-          fitView
-          minZoom={0.2}
-          maxZoom={1.8}
-          proOptions={{ hideAttribution: true }}
-          className="bg-background"
-        >
-          <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="hsl(218 20% 20%)" />
-          <Controls className="!border-border !bg-surface" />
-          <MiniMap
-            pannable
-            zoomable
-            className="!bg-surface"
-            nodeColor={(n) => {
-              const k = (n.data as OilNodeData).nodeKind;
-              return k === "step"
-                ? "hsl(210 70% 55%)"
-                : k === "persona"
-                  ? "hsl(270 55% 62%)"
-                  : "hsl(190 70% 50%)";
+        <div className="relative min-w-0 flex-1">
+          {/* Toolbar */}
+          <div className="absolute left-3 top-3 z-10 flex flex-col gap-2">
+            <div className="flex gap-1 rounded-md border border-border bg-surface/90 p-1 backdrop-blur">
+              {LAYOUT_MODES.map((m) => (
+                <Button
+                  key={m.value}
+                  size="sm"
+                  variant={layoutMode === m.value ? "default" : "ghost"}
+                  onClick={() => setLayoutMode(m.value)}
+                >
+                  {m.label}
+                </Button>
+              ))}
+            </div>
+            {layoutMode === "full" && (
+              <div className="flex gap-1 rounded-md border border-border bg-surface/90 p-1 backdrop-blur">
+                {(["personas", "data", "constraints"] as const).map((l) => (
+                  <button
+                    key={l}
+                    onClick={() => toggleLayer(l)}
+                    className={cn(
+                      "rounded px-2 py-1 text-xs capitalize transition-colors",
+                      layers[l] ? "bg-muted text-foreground" : "text-muted-foreground",
+                    )}
+                  >
+                    {l}
+                  </button>
+                ))}
+              </div>
+            )}
+            {layoutMode === "constraint_focus" && (
+              <div className="rounded-md border border-border bg-surface/90 px-2 py-1 text-[11px] text-muted-foreground backdrop-blur">
+                Highlighting the system constraint and everything subordinate (downstream).
+              </div>
+            )}
+            <div className="flex items-center gap-1.5 rounded-md border border-border bg-surface/90 p-1 text-[11px] text-muted-foreground backdrop-blur">
+              <span className="pl-1">Drag to link · new edge:</span>
+              <Select
+                value={newEdgeType}
+                onChange={(e) => setNewEdgeType(e.target.value as EdgeType)}
+                className="h-7 w-32"
+              >
+                {EDGE_TYPES.map((t) => (
+                  <option key={t} value={t}>
+                    {titleCase(t)}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div className="rounded-md border border-border bg-surface/90 px-2 py-1 text-[11px] text-muted-foreground backdrop-blur">
+              Double-click a step to drill into its sub-steps.
+            </div>
+          </div>
+
+          {isEmptyLevel && (
+            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 text-center text-muted-foreground">
+              <p className="text-sm">No sub-steps under “{stepPath.at(-1)?.name}” yet.</p>
+              <Button size="sm" onClick={() => setAddingStep(true)}>
+                <Plus size={14} /> Add the first sub-step
+              </Button>
+            </div>
+          )}
+
+          <ReactFlow
+            nodes={nodes}
+            edges={rfEdges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            onConnect={onConnect}
+            onEdgesDelete={onEdgesDelete}
+            nodeTypes={nodeTypes}
+            onNodeClick={(_, n) => {
+              if (n.type === "deptBg") return; // department backdrop, not selectable
+              setSelected(n.data as OilNodeData);
             }}
-          />
-        </ReactFlow>
+            onNodeDoubleClick={(_, n) => {
+              const data = n.data as OilNodeData;
+              if (data.nodeKind === "step" && data.entityId) drillInto(data.entityId);
+            }}
+            onPaneClick={() => setSelected(null)}
+            fitView
+            minZoom={0.2}
+            maxZoom={1.8}
+            proOptions={{ hideAttribution: true }}
+            className="bg-background"
+          >
+            <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="hsl(218 20% 20%)" />
+            <Controls className="!border-border !bg-surface" />
+            <MiniMap
+              pannable
+              zoomable
+              className="!bg-surface"
+              nodeColor={(n) => {
+                const k = (n.data as OilNodeData).nodeKind;
+                return k === "step"
+                  ? "hsl(210 70% 55%)"
+                  : k === "persona"
+                    ? "hsl(270 55% 62%)"
+                    : "hsl(190 70% 50%)";
+              }}
+            />
+          </ReactFlow>
+        </div>
       </div>
-      {selected && <DetailDrawer node={selected} onClose={() => setSelected(null)} />}
+      {selected && (
+        <DetailDrawer
+          node={selected}
+          onClose={() => setSelected(null)}
+          onDrill={(stepId) => drillInto(stepId)}
+        />
+      )}
+
+      <EntityModalForm
+        open={addingStep}
+        onClose={() => setAddingStep(false)}
+        entityKey="process_steps"
+        title={parentStepId ? "New Sub-step" : "New Process Step"}
+        fields={processStepFields}
+        extra={{ value_stream_id: vsId, parent_step_id: parentStepId }}
+      />
     </div>
   );
 }

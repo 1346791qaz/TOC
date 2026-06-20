@@ -311,6 +311,53 @@ export function seedAcme(): { seeded: boolean } {
     });
   }
 
+  // ---- sub-steps of Final Assembly (drill-down sample) ------------------
+  // Final Assembly (S(7)) is the system constraint; break it into its detailed
+  // build procedure so the analyst can drill in and exploit it.
+  const FS = (n: number) => `00000000-0000-4000-8000-0000000a07${String(n).padStart(2, "0")}`;
+  const subSteps: { n: number; name: string; entry: string; action: string; exit: string; cycle: number; wait: number; pca: number; pain?: string }[] = [
+    { n: 1, name: "Stage hardware kit", entry: "Sub-assembly + kit list", action: "Pull and verify hardware kit at the cell", exit: "Kit staged", cycle: 0.3, wait: 0.5, pca: 85 },
+    { n: 2, name: "Mechanical assembly", entry: "Staged kit", action: "Assemble housing, route harness, seat PCB", exit: "Mechanically assembled", cycle: 1.2, wait: 1, pca: 80 },
+    { n: 3, name: "Torque to spec", entry: "Mechanically assembled unit", action: "Torque fasteners to drawing spec in sequence", exit: "Torqued + witnessed", cycle: 0.8, wait: 2, pca: 60, pain: "Torque values live in senior builders' heads; no torque table at the station and no recorded torque values per unit." },
+    { n: 4, name: "Affix internal label", entry: "Torqued unit", action: "Apply internal serial/build label", exit: "Labeled", cycle: 0.2, wait: 0.5, pca: 90 },
+    { n: 5, name: "Builder sign-off", entry: "Labeled unit", action: "Builder verifies build, records as-built", exit: "Released to test", cycle: 0.5, wait: 1.5, pca: 55, pain: "Sign-off is verbal; no serialized as-built record is captured, so returns can't be traced to a build." },
+  ];
+  for (const s of subSteps) {
+    repos.process_steps.create(
+      {
+        value_stream_id: V,
+        parent_step_id: S(7),
+        name: s.name,
+        sequence_index: s.n - 1,
+        entry_criteria: s.entry,
+        action: s.action,
+        exit_criteria: s.exit,
+        pain_points: s.pain ?? null,
+        cycle_time: s.cycle,
+        wait_time: s.wait,
+        pct_complete_accurate: s.pca,
+      },
+      FS(s.n),
+    );
+  }
+  // Builder executes every sub-step; QA is consulted on sign-off.
+  for (const s of subSteps) {
+    repos.step_personas.create({ step_id: FS(s.n), persona_id: P(7), role_on_step: "executor" });
+  }
+  repos.step_personas.create({ step_id: FS(5), persona_id: P(8), role_on_step: "consulted" });
+  // A couple of data gaps inside the constraint.
+  repos.data_elements.create({ step_id: FS(3), name: "Torque values", binding_point: "action", data_type: "number", source_system: "None", presence: "missing", quality_notes: "Not captured per unit.", is_key: true });
+  repos.data_elements.create({ step_id: FS(5), name: "As-built record", binding_point: "exit", data_type: "record", source_system: "None", presence: "missing", quality_notes: "Verbal sign-off only.", is_key: true });
+  // Sequence spine among the sub-steps (drives the drilled-in canvas).
+  for (let i = 1; i < subSteps.length; i++) {
+    repos.flow_edges.create({
+      value_stream_id: V,
+      from_type: "step", from_id: FS(i),
+      to_type: "step", to_id: FS(i + 1),
+      edge_type: "sequence", notes: null,
+    });
+  }
+
   return { seeded: true };
 }
 
