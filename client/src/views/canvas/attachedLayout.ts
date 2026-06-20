@@ -31,6 +31,7 @@ const DATA_H = 44;
 const CELL_GAP = 8;
 const SECTION_GAP = 18;
 const DOMAIN_PAD = 12;
+const LANE_HEADER = 28; // headroom above the step so the lane label isn't hidden
 
 const BINDING_ORDER: Record<string, number> = { entry: 0, action: 1, exit: 2 };
 const ROLE_ORDER: Record<string, number> = { executor: 0, approver: 1, consulted: 2, informed: 3 };
@@ -115,6 +116,15 @@ export function buildAttachedGraph(input: AttachedInput): {
 
   const sorted = [...steps].sort((a, b) => a.sequence_index - b.sequence_index);
 
+  interface StepMeta {
+    step: ProcessStep;
+    x: number;
+    ownerDomain: string;
+    ownerColor: DomainColor;
+    contentBottom: number;
+  }
+  const meta: StepMeta[] = [];
+
   sorted.forEach((step, i) => {
     const x = i * COL_SPACING;
 
@@ -195,27 +205,44 @@ export function buildAttachedGraph(input: AttachedInput): {
       }
     }
 
-    // One domain-ownership lane wrapping the whole column (step + cells).
     const contentBottom = Math.max(STEP_H, cursorY - CELL_GAP);
+    meta.push({ step, x, ownerDomain, ownerColor, contentBottom });
+  });
+
+  // Merge runs of consecutive same-domain steps into a single ownership lane
+  // spanning all their columns, with a header band above the steps for the
+  // domain label so it isn't hidden behind the step block.
+  let r = 0;
+  while (r < meta.length) {
+    const dom = meta[r].ownerDomain;
+    let e = r;
+    while (e + 1 < meta.length && meta[e + 1].ownerDomain === dom) e++;
+    const run = meta.slice(r, e + 1);
+    const left = run[0].x - DOMAIN_PAD;
+    const right = run[run.length - 1].x + STEP_W + DOMAIN_PAD;
+    const top = -LANE_HEADER;
+    const maxBottom = Math.max(...run.map((m) => m.contentBottom));
+    const color = run[0].ownerColor;
     laneNodes.push({
-      id: `lane:${step.id}`,
+      id: `lane:${run[0].step.id}`,
       type: "deptBg",
-      position: { x: x - DOMAIN_PAD, y: -DOMAIN_PAD },
-      style: { width: STEP_W + DOMAIN_PAD * 2, height: contentBottom + DOMAIN_PAD * 2 },
+      position: { x: left, y: top },
+      style: { width: right - left, height: maxBottom + DOMAIN_PAD - top },
       selectable: false,
       draggable: false,
       zIndex: 0,
       data: {
-        label: ownerDomain,
+        label: dom,
         nodeKind: "step",
         entityId: "",
         dimmed: false,
         isBackground: true,
-        deptColor: ownerColor.border,
-        deptBg: ownerColor.bg,
+        deptColor: color.border,
+        deptBg: color.bg,
       },
     });
-  });
+    r = e + 1;
+  }
 
   // Step-to-step dependency edges (cells are attached spatially, no edges).
   const stepIds = new Set(sorted.map((s) => s.id));

@@ -140,8 +140,11 @@ export function DeptBackground({ data }: NodeProps) {
       }}
     >
       <span
-        className="absolute left-1.5 top-1 text-[9px] font-semibold uppercase tracking-wider"
-        style={{ color: d.deptColor ?? "hsl(270 60% 80%)", opacity: 0.85 }}
+        className="absolute left-2 top-1 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider"
+        style={{
+          color: d.deptColor ?? "hsl(270 60% 80%)",
+          background: "hsl(222 30% 6% / 0.65)",
+        }}
       >
         {d.label}
       </span>
