@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { freshDb } from "./setup";
 import { repos } from "../repositories";
 import { exportEngagement, importEngagement } from "../io/portable";
+import { seed } from "../db/seed";
 
 let cleanup: () => void;
 beforeEach(() => {
@@ -42,6 +43,23 @@ describe("process step hierarchy", () => {
     const top = repos.process_steps.list({ where: { value_stream_id: vs.id, parent_step_id: null } });
     expect(top).toHaveLength(1);
     expect(top[0].name).toBe("Final Assembly");
+  });
+
+  it("seeds ACME with notional sub-steps across multiple parents", () => {
+    seed();
+    const all = repos.process_steps.list();
+    const subs = all.filter((s) => s.parent_step_id);
+    expect(subs.length).toBe(20);
+    const parents = new Set(subs.map((s) => s.parent_step_id));
+    expect(parents.size).toBe(5);
+  });
+
+  it("sub-step seeding is idempotent (re-seed adds nothing)", () => {
+    seed();
+    const before = repos.process_steps.list().filter((s) => s.parent_step_id).length;
+    seed();
+    const after = repos.process_steps.list().filter((s) => s.parent_step_id).length;
+    expect(after).toBe(before);
   });
 
   it("round-trips the hierarchy through export/import", () => {

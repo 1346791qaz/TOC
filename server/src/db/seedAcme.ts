@@ -74,7 +74,11 @@ const PERSONAS: PersonaDef[] = [
 
 export function seedAcme(): { seeded: boolean } {
   runMigrations();
-  if (repos.engagements.get(E, { includeDeleted: true })) return { seeded: false };
+  if (repos.engagements.get(E, { includeDeleted: true })) {
+    // ACME already exists — top up any newly-added notional sub-steps.
+    seedAcmeSubSteps();
+    return { seeded: false };
+  }
 
   repos.engagements.create(
     {
@@ -375,7 +379,140 @@ export function seedAcme(): { seeded: boolean } {
     });
   }
 
+  seedAcmeSubSteps();
   return { seeded: true };
+}
+
+// ---------------------------------------------------------------------------
+// Additive, idempotent notional sub-steps across several ACME steps. Each
+// parent is guarded by its first sub-step id, so this can top up an existing
+// ACME engagement (or run during a fresh seed) without duplicating.
+// ---------------------------------------------------------------------------
+interface SubDataDef {
+  name: string;
+  bind: "entry" | "action" | "exit";
+  presence: "present" | "partial" | "missing";
+  key?: boolean;
+  desc?: string;
+  type?: string;
+  src?: string;
+  tbl?: string;
+  fld?: string;
+  ex?: string;
+  notes?: string;
+}
+interface SubStepDef {
+  k: number;
+  name: string;
+  entry: string;
+  action: string;
+  exit: string;
+  cycle?: number;
+  wait?: number;
+  pca?: number;
+  data?: SubDataDef[];
+}
+interface ParentSubs {
+  parent: number; // S(parent)
+  block: string; // 2-hex id block (must not collide: 01=steps, 02=personas, 07=FA)
+  executor: number; // P(executor)
+  subs: SubStepDef[];
+}
+
+const SUB_DEFS: ParentSubs[] = [
+  {
+    parent: 1, block: "03", executor: 1,
+    subs: [
+      { k: 1, name: "Receive & log PO", entry: "PO arrives (EDI / portal)", action: "Capture PO into the order queue", exit: "PO logged", data: [{ name: "PO number", bind: "entry", presence: "present", key: true, desc: "Customer purchase order number", type: "string(10)", src: "EDI gateway", tbl: "VBAK", fld: "BSTNK", ex: "PO-2026-04417" }] },
+      { k: 2, name: "Validate SKU & pricing", entry: "Logged PO", action: "Verify SKU validity and price", exit: "Priced order lines", data: [{ name: "Net price", bind: "action", presence: "partial", desc: "Line net price", type: "decimal", src: "SAP SD", tbl: "VBAP", fld: "NETPR", ex: "189.00", notes: "Manual lookups for configured SKUs" }] },
+      { k: 3, name: "Credit check", entry: "Priced order", action: "Run / clear the credit check", exit: "Credit cleared or held", data: [{ name: "Credit status", bind: "action", presence: "partial", desc: "Credit release status", type: "char(1)", src: "SAP FI", tbl: "VBUK", fld: "CMGST", ex: "A (approved)" }] },
+      { k: 4, name: "Confirm & promise date", entry: "Credit cleared", action: "Confirm order and set the promised date", exit: "Confirmed order in ERP", data: [{ name: "Promised date", bind: "exit", presence: "partial", key: true, desc: "Committed delivery date", type: "date", src: "SAP SD", tbl: "VBAP", fld: "EDATU", ex: "2026-05-12" }] },
+    ],
+  },
+  {
+    parent: 2, block: "04", executor: 2,
+    subs: [
+      { k: 1, name: "Load forecast", entry: "Weekly forecast file", action: "Import forecast into planning", exit: "Forecast loaded", data: [{ name: "Forecast qty", bind: "entry", presence: "partial", key: true, desc: "Weekly demand by SKU", type: "decimal", src: "Excel", tbl: "forecast.xlsx", fld: "qty_wk", ex: "1,250" }] },
+      { k: 2, name: "Run MRP", entry: "Forecast + confirmed orders", action: "Execute the MRP run", exit: "Planned orders generated", data: [{ name: "Planned order qty", bind: "action", presence: "present", desc: "MRP planned order quantity", type: "int", src: "SAP PP", tbl: "PLAF", fld: "GSMNG", ex: "320" }] },
+      { k: 3, name: "Sequence the line", entry: "Planned orders", action: "Sequence work orders by priority", exit: "Sequenced schedule", data: [{ name: "Schedule sequence", bind: "exit", presence: "missing", key: true, desc: "Build sequence for the line", src: "Whiteboard", tbl: "(none)", fld: "—", ex: "WO-8841, WO-8839…", notes: "On the floor whiteboard only" }] },
+      { k: 4, name: "Release work orders", entry: "Sequenced schedule", action: "Release work orders to the floor", exit: "Released work orders", data: [{ name: "Work order", bind: "exit", presence: "present", desc: "Released production order", type: "string(12)", src: "SAP PP", tbl: "AFKO", fld: "AUFNR", ex: "000080012345" }] },
+    ],
+  },
+  {
+    parent: 4, block: "05", executor: 4,
+    subs: [
+      { k: 1, name: "Receive at dock", entry: "Truck arrives", action: "Receive and stage materials", exit: "Materials received", data: [{ name: "Goods receipt", bind: "entry", presence: "present", desc: "Goods-receipt document", type: "string(10)", src: "SAP MM", tbl: "MSEG", fld: "MBLNR", ex: "5000456789" }] },
+      { k: 2, name: "Sample per plan", entry: "Received lot", action: "Pull sample and measure vs spec", exit: "Sample measured", data: [{ name: "Inspection plan", bind: "entry", presence: "missing", key: true, desc: "Standard sampling / inspection plan", src: "Paper", tbl: "(none)", fld: "—", ex: "AQL 1.0", notes: "No standardized plan" }] },
+      { k: 3, name: "Disposition lot", entry: "Sample results", action: "Accept / reject and record", exit: "Lot dispositioned", data: [{ name: "Disposition", bind: "exit", presence: "missing", key: true, desc: "Accept / reject decision", src: "None", tbl: "(none)", fld: "—", ex: "Accept", notes: "Verbal, not recorded" }] },
+    ],
+  },
+  {
+    parent: 8, block: "06", executor: 8,
+    subs: [
+      { k: 1, name: "Load test program", entry: "Unit + traveler", action: "Load the FCT program on the rig", exit: "Rig ready", data: [{ name: "Test program", bind: "entry", presence: "missing", key: true, desc: "Functional test sequence", src: "Engineer laptop", tbl: "(file)", fld: "—", ex: "widget_fct_v7.seq", notes: "Single laptop copy" }] },
+      { k: 2, name: "Power-on & calibrate", entry: "Rig ready", action: "Power on and calibrate", exit: "Calibrated", data: [{ name: "Calibration cert", bind: "action", presence: "partial", desc: "Calibration record", type: "string", src: "QMS", tbl: "qms.calibration", fld: "cert_id", ex: "CAL-7741" }] },
+      { k: 3, name: "Leak / EMC check", entry: "Calibrated unit", action: "Run leak and EMC checks", exit: "Checks complete", data: [{ name: "Parametric results", bind: "action", presence: "missing", key: true, desc: "Measured test parameters", src: "Test rig", tbl: "(not persisted)", fld: "—", ex: "leak 2.1 sccm", notes: "Discarded; only pass/fail kept" }] },
+      { k: 4, name: "Disposition & release", entry: "Checks complete", action: "Pass / fail and release", exit: "Released or scrapped", data: [{ name: "Final disposition", bind: "exit", presence: "missing", key: true, desc: "Release decision", src: "None", tbl: "(none)", fld: "—", ex: "PASS", notes: "Verbal" }] },
+    ],
+  },
+];
+
+export function seedAcmeSubSteps(): void {
+  runMigrations();
+  // Require the ACME value stream / parent steps to exist.
+  if (!repos.process_steps.get(S(1), { includeDeleted: true })) return;
+
+  const SUB = (block: string, k: number) =>
+    `00000000-0000-4000-8000-0000000a${block}${String(k).padStart(2, "0")}`;
+
+  for (const def of SUB_DEFS) {
+    // Idempotency guard: if the first sub-step exists, this parent is done.
+    if (repos.process_steps.get(SUB(def.block, 1), { includeDeleted: true })) continue;
+
+    for (const s of def.subs) {
+      repos.process_steps.create(
+        {
+          value_stream_id: V,
+          parent_step_id: S(def.parent),
+          name: s.name,
+          sequence_index: s.k - 1,
+          entry_criteria: s.entry,
+          action: s.action,
+          exit_criteria: s.exit,
+          cycle_time: s.cycle ?? 0.4,
+          wait_time: s.wait ?? 0.5,
+          pct_complete_accurate: s.pca ?? 80,
+        },
+        SUB(def.block, s.k),
+      );
+      repos.step_personas.create({ step_id: SUB(def.block, s.k), persona_id: P(def.executor), role_on_step: "executor" });
+      for (const d of s.data ?? []) {
+        repos.data_elements.create({
+          step_id: SUB(def.block, s.k),
+          name: d.name,
+          business_description: d.desc ?? null,
+          binding_point: d.bind,
+          data_type: d.type ?? null,
+          source_system: d.src ?? null,
+          table_or_view: d.tbl ?? null,
+          field_name: d.fld ?? null,
+          example_value: d.ex ?? null,
+          presence: d.presence,
+          quality_notes: d.notes ?? null,
+          is_key: d.key ?? false,
+        });
+      }
+    }
+    // Sequence spine among this parent's sub-steps.
+    for (let i = 1; i < def.subs.length; i++) {
+      repos.flow_edges.create({
+        value_stream_id: V,
+        from_type: "step", from_id: SUB(def.block, def.subs[i - 1].k),
+        to_type: "step", to_id: SUB(def.block, def.subs[i].k),
+        edge_type: "sequence", notes: null,
+      });
+    }
+  }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
