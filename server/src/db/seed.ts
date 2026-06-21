@@ -24,13 +24,14 @@ const ID = {
   },
 } as const;
 
-export function seed(): { seeded: boolean } {
+export function seed(): { seeded: boolean; subStepsAdded: number } {
   runMigrations();
 
   // If the primary engagement already exists, still ensure the ACME sample is
   // present (it has its own idempotency guard) and return.
   if (repos.engagements.get(ID.engagement, { includeDeleted: true })) {
-    return { seeded: seedAcme().seeded };
+    const r = seedAcme();
+    return { seeded: r.seeded, subStepsAdded: r.subStepsAdded };
   }
 
   repos.engagements.create(
@@ -303,13 +304,20 @@ export function seed(): { seeded: boolean } {
 
   // Seed the ACME sample engagement after the primary so the primary remains
   // the default-selected engagement on first load.
-  seedAcme();
+  const acme = seedAcme();
 
-  return { seeded: true };
+  return { seeded: true, subStepsAdded: acme.subStepsAdded };
 }
 
 // Cross-platform "run directly?" check (Windows paths break a string compare).
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const result = seed();
-  console.log(result.seeded ? "[seed] seed data inserted" : "[seed] seed already present, skipped");
+  const base = result.seeded ? "seed data inserted" : "base seed already present";
+  const subs =
+    result.subStepsAdded > 0
+      ? `; added ${result.subStepsAdded} ACME sub-steps`
+      : result.seeded
+        ? ""
+        : " (no changes)";
+  console.log(`[seed] ${base}${subs}`);
 }

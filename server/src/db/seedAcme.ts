@@ -72,12 +72,12 @@ const PERSONAS: PersonaDef[] = [
   { n: 12, name: "Plant Manager", role: "Operations Manager", fn: "Operations", scope: "system", resp: "Owns plant P&L and flow performance.", auth: "Can authorize capacity / capital." },
 ];
 
-export function seedAcme(): { seeded: boolean } {
+export function seedAcme(): { seeded: boolean; subStepsAdded: number } {
   runMigrations();
   if (repos.engagements.get(E, { includeDeleted: true })) {
     // ACME already exists — top up any newly-added notional sub-steps.
-    seedAcmeSubSteps();
-    return { seeded: false };
+    const subStepsAdded = seedAcmeSubSteps();
+    return { seeded: false, subStepsAdded };
   }
 
   repos.engagements.create(
@@ -379,8 +379,8 @@ export function seedAcme(): { seeded: boolean } {
     });
   }
 
-  seedAcmeSubSteps();
-  return { seeded: true };
+  const subStepsAdded = seedAcmeSubSteps();
+  return { seeded: true, subStepsAdded };
 }
 
 // ---------------------------------------------------------------------------
@@ -457,14 +457,15 @@ const SUB_DEFS: ParentSubs[] = [
   },
 ];
 
-export function seedAcmeSubSteps(): void {
+export function seedAcmeSubSteps(): number {
   runMigrations();
   // Require the ACME value stream / parent steps to exist.
-  if (!repos.process_steps.get(S(1), { includeDeleted: true })) return;
+  if (!repos.process_steps.get(S(1), { includeDeleted: true })) return 0;
 
   const SUB = (block: string, k: number) =>
     `00000000-0000-4000-8000-0000000a${block}${String(k).padStart(2, "0")}`;
 
+  let added = 0;
   for (const def of SUB_DEFS) {
     // Idempotency guard: if the first sub-step exists, this parent is done.
     if (repos.process_steps.get(SUB(def.block, 1), { includeDeleted: true })) continue;
@@ -485,6 +486,7 @@ export function seedAcmeSubSteps(): void {
         },
         SUB(def.block, s.k),
       );
+      added++;
       repos.step_personas.create({ step_id: SUB(def.block, s.k), persona_id: P(def.executor), role_on_step: "executor" });
       for (const d of s.data ?? []) {
         repos.data_elements.create({
@@ -513,9 +515,12 @@ export function seedAcmeSubSteps(): void {
       });
     }
   }
+  return added;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const r = seedAcme();
-  console.log(r.seeded ? "[seed:acme] ACME engagement inserted" : "[seed:acme] already present, skipped");
+  const base = r.seeded ? "ACME engagement inserted" : "already present";
+  const subs = r.subStepsAdded > 0 ? `; added ${r.subStepsAdded} sub-steps` : "";
+  console.log(`[seed:acme] ${base}${subs}`);
 }
