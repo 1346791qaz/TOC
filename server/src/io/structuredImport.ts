@@ -4,7 +4,14 @@ import { repos } from "../repositories";
 
 // Structured import for the three bulk-entry entities. Scope boundary (v1):
 // structured rows only — no Visio/Lucidchart/BPMN parsing.
-export const IMPORTABLE_KINDS = ["process_steps", "personas", "data_elements"] as const;
+export const IMPORTABLE_KINDS = [
+  "process_steps",
+  "personas",
+  "data_elements",
+  "assumptions",
+  "metrics",
+  "constraints",
+] as const;
 export type ImportableKind = (typeof IMPORTABLE_KINDS)[number];
 
 const num = (v: unknown): number | null => {
@@ -79,6 +86,68 @@ export function importStructured(
         cycle_time: num(r.cycle_time),
         wait_time: num(r.wait_time),
         pct_complete_accurate: num(r.pct_complete_accurate),
+      });
+      created++;
+    }
+  } else if (kind === "assumptions") {
+    for (const r of rows) {
+      const statement = str(r.statement);
+      if (!statement) { skipped++; continue; }
+      const statusVal = str(r.status);
+      repos.assumptions.create({
+        value_stream_id: valueStreamId,
+        statement,
+        status: (["unvalidated", "supported", "refuted"].includes(statusVal ?? "")
+          ? statusVal
+          : "unvalidated") as never,
+        evidence: str(r.evidence),
+      });
+      created++;
+    }
+  } else if (kind === "metrics") {
+    const METRIC_TYPES = ["throughput", "inventory_wip", "operating_expense", "lead_time", "quality", "other"];
+    for (const r of rows) {
+      const name = str(r.name);
+      if (!name) { skipped++; continue; }
+      const mtVal = str(r.metric_type);
+      repos.metrics.create({
+        value_stream_id: valueStreamId,
+        name,
+        unit: str(r.unit),
+        source: str(r.source),
+        metric_type: (METRIC_TYPES.includes(mtVal ?? "") ? mtVal : "other") as never,
+        baseline_value: num(r.baseline_value),
+        current_value: num(r.current_value),
+        target_value: num(r.target_value),
+        is_leading: bool(r.is_leading),
+      });
+      created++;
+    }
+  } else if (kind === "constraints") {
+    const KINDS = ["constraint", "risk", "breakdown", "pain_point", "seam"];
+    const SEVERITIES = ["low", "medium", "high", "critical"];
+    const LIKELIHOODS = ["low", "medium", "high"];
+    const TOC = ["none", "identified", "exploit", "subordinate", "elevate", "broken"];
+    const TARGET_TYPES = ["step", "persona", "data_element", "edge", "value_stream"];
+    for (const r of rows) {
+      const title = str(r.title);
+      if (!title) { skipped++; continue; }
+      const kindVal = str(r.kind);
+      const sevVal = str(r.severity);
+      const likeVal = str(r.likelihood);
+      const tocVal = str(r.toc_status);
+      const ttVal = str(r.target_type);
+      repos.constraints.create({
+        value_stream_id: valueStreamId,
+        title,
+        description: str(r.description),
+        kind: (KINDS.includes(kindVal ?? "") ? kindVal : "constraint") as never,
+        target_type: (TARGET_TYPES.includes(ttVal ?? "") ? ttVal : "value_stream") as never,
+        target_id: null,
+        severity: (SEVERITIES.includes(sevVal ?? "") ? sevVal : "medium") as never,
+        likelihood: (LIKELIHOODS.includes(likeVal ?? "") ? likeVal : null) as never,
+        toc_status: (TOC.includes(tocVal ?? "") ? tocVal : "none") as never,
+        is_system_constraint: bool(r.is_system_constraint),
       });
       created++;
     }
