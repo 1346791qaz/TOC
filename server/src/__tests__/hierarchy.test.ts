@@ -45,13 +45,22 @@ describe("process step hierarchy", () => {
     expect(top[0].name).toBe("Final Assembly");
   });
 
-  it("seeds ACME with notional sub-steps across multiple parents", () => {
+  it("seeds ACME with notional sub-steps across multiple parents (incl. 3rd gen)", () => {
     seed();
     const all = repos.process_steps.list();
     const subs = all.filter((s) => s.parent_step_id);
-    expect(subs.length).toBe(20);
+    // 20 second-generation + 9 third-generation sub-steps.
+    expect(subs.length).toBe(29);
     const parents = new Set(subs.map((s) => s.parent_step_id));
-    expect(parents.size).toBe(5);
+    expect(parents.size).toBe(8);
+
+    // A 3-generation chain exists: a sub-step whose parent is itself a sub-step.
+    const byId = new Map(all.map((s) => [s.id, s]));
+    const thirdGen = subs.filter((s) => {
+      const parent = s.parent_step_id ? byId.get(s.parent_step_id) : undefined;
+      return parent?.parent_step_id != null;
+    });
+    expect(thirdGen.length).toBe(9);
   });
 
   it("sub-step seeding is idempotent (re-seed adds nothing)", () => {

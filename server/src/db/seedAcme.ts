@@ -16,6 +16,12 @@ const S = (n: number) => `00000000-0000-4000-8000-0000000a01${String(n).padStart
 // Persona ids 01..12
 const P = (n: number) => `00000000-0000-4000-8000-0000000a02${String(n).padStart(2, "0")}`;
 
+// Sub-step ids: 2nd generation uses the 'a' namespace blocks, 3rd generation
+// the 'b' namespace, so the three generations never collide.
+const pad2 = (k: number) => String(k).padStart(2, "0");
+const subId = (block: string, k: number) => `00000000-0000-4000-8000-0000000a${block}${pad2(k)}`;
+const gsubId = (block: string, k: number) => `00000000-0000-4000-8000-0000000b${block}${pad2(k)}`;
+
 interface StepDef {
   n: number;
   name: string;
@@ -76,7 +82,7 @@ export function seedAcme(): { seeded: boolean; subStepsAdded: number } {
   runMigrations();
   if (repos.engagements.get(E, { includeDeleted: true })) {
     // ACME already exists — top up any newly-added notional sub-steps.
-    const subStepsAdded = seedAcmeSubSteps();
+    const subStepsAdded = seedAcmeSubSteps() + seedAcmeGrandSubSteps();
     return { seeded: false, subStepsAdded };
   }
 
@@ -379,7 +385,7 @@ export function seedAcme(): { seeded: boolean; subStepsAdded: number } {
     });
   }
 
-  const subStepsAdded = seedAcmeSubSteps();
+  const subStepsAdded = seedAcmeSubSteps() + seedAcmeGrandSubSteps();
   return { seeded: true, subStepsAdded };
 }
 
@@ -511,6 +517,102 @@ export function seedAcmeSubSteps(): number {
         value_stream_id: V,
         from_type: "step", from_id: SUB(def.block, def.subs[i - 1].k),
         to_type: "step", to_id: SUB(def.block, def.subs[i].k),
+        edge_type: "sequence", notes: null,
+      });
+    }
+  }
+  return added;
+}
+
+// ---------------------------------------------------------------------------
+// 3rd generation: sub-steps of selected sub-steps (e.g. Final Assembly →
+// Torque to spec → its detailed procedure). Additive and idempotent.
+// ---------------------------------------------------------------------------
+interface GrandDef {
+  parentSubId: string; // the 2nd-gen sub-step these nest under
+  block: string; // 'b' namespace block
+  executor: number; // P(executor)
+  subs: SubStepDef[];
+}
+
+const GRAND_DEFS: GrandDef[] = [
+  {
+    // Order Intake → Credit check → …
+    parentSubId: subId("03", 3), block: "01", executor: 1,
+    subs: [
+      { k: 1, name: "Pull credit report", entry: "Credit check requested", action: "Retrieve bureau credit report", exit: "Report on file", data: [{ name: "Bureau score", bind: "action", presence: "present", desc: "Credit bureau score", type: "int", src: "Experian API", tbl: "credit.report", fld: "score", ex: "742" }] },
+      { k: 2, name: "Evaluate vs limit", entry: "Report on file", action: "Compare exposure to the credit limit", exit: "Decision drafted", data: [{ name: "Credit limit", bind: "entry", presence: "present", desc: "Customer credit limit", type: "decimal", src: "SAP FI", tbl: "KNKK", fld: "KLIMK", ex: "50,000" }] },
+      { k: 3, name: "Record decision", entry: "Decision drafted", action: "Set the release / hold flag", exit: "Credit cleared or held", data: [{ name: "Credit block", bind: "exit", presence: "partial", desc: "Credit release flag", type: "char(1)", src: "SAP SD", tbl: "VBUK", fld: "CMGST", ex: "A", notes: "Sometimes overridden verbally" }] },
+    ],
+  },
+  {
+    // Final Assembly → Torque to spec → … (3 generations under the constraint)
+    parentSubId: subId("07", 3), block: "02", executor: 7,
+    subs: [
+      { k: 1, name: "Set driver torque", entry: "Unit staged for torque", action: "Set the calibrated driver to spec", exit: "Driver set", data: [{ name: "Torque setpoint", bind: "action", presence: "missing", key: true, desc: "Target torque value", type: "N·m", src: "Tribal knowledge", tbl: "(none)", fld: "—", ex: "2.4 N·m" }] },
+      { k: 2, name: "Drive fasteners in sequence", entry: "Driver set", action: "Torque fasteners per the pattern", exit: "Fasteners torqued" },
+      { k: 3, name: "Witness / verify", entry: "Fasteners torqued", action: "Second-person verify torque", exit: "Torque witnessed", data: [{ name: "Witness mark", bind: "exit", presence: "missing", desc: "Torque witness / seal", src: "None", tbl: "(none)", fld: "—", ex: "paint mark", notes: "Not recorded" }] },
+    ],
+  },
+  {
+    // Functional Test → Leak / EMC check → …
+    parentSubId: subId("06", 3), block: "03", executor: 8,
+    subs: [
+      { k: 1, name: "Leak test", entry: "Calibrated unit", action: "Pressurize and measure leak rate", exit: "Leak result", data: [{ name: "Leak rate", bind: "action", presence: "missing", key: true, desc: "Measured leak rate", type: "sccm", src: "Test rig", tbl: "(not persisted)", fld: "—", ex: "2.1 sccm" }] },
+      { k: 2, name: "EMC scan", entry: "Leak result", action: "Run the EMC emissions scan", exit: "EMC result" },
+      { k: 3, name: "Log results", entry: "EMC result", action: "Record the parametric results", exit: "Checks complete", data: [{ name: "Parametric log", bind: "exit", presence: "missing", key: true, desc: "All measured test parameters", src: "None", tbl: "(discarded)", fld: "—", ex: "CSV", notes: "Only pass/fail kept" }] },
+    ],
+  },
+];
+
+export function seedAcmeGrandSubSteps(): number {
+  runMigrations();
+  let added = 0;
+  for (const def of GRAND_DEFS) {
+    // Parent sub-step must exist; idempotency guard on the first grandchild.
+    if (!repos.process_steps.get(def.parentSubId, { includeDeleted: true })) continue;
+    if (repos.process_steps.get(gsubId(def.block, 1), { includeDeleted: true })) continue;
+
+    for (const s of def.subs) {
+      repos.process_steps.create(
+        {
+          value_stream_id: V,
+          parent_step_id: def.parentSubId,
+          name: s.name,
+          sequence_index: s.k - 1,
+          entry_criteria: s.entry,
+          action: s.action,
+          exit_criteria: s.exit,
+          cycle_time: s.cycle ?? 0.3,
+          wait_time: s.wait ?? 0.3,
+          pct_complete_accurate: s.pca ?? 80,
+        },
+        gsubId(def.block, s.k),
+      );
+      added++;
+      repos.step_personas.create({ step_id: gsubId(def.block, s.k), persona_id: P(def.executor), role_on_step: "executor" });
+      for (const d of s.data ?? []) {
+        repos.data_elements.create({
+          step_id: gsubId(def.block, s.k),
+          name: d.name,
+          business_description: d.desc ?? null,
+          binding_point: d.bind,
+          data_type: d.type ?? null,
+          source_system: d.src ?? null,
+          table_or_view: d.tbl ?? null,
+          field_name: d.fld ?? null,
+          example_value: d.ex ?? null,
+          presence: d.presence,
+          quality_notes: d.notes ?? null,
+          is_key: d.key ?? false,
+        });
+      }
+    }
+    for (let i = 1; i < def.subs.length; i++) {
+      repos.flow_edges.create({
+        value_stream_id: V,
+        from_type: "step", from_id: gsubId(def.block, def.subs[i - 1].k),
+        to_type: "step", to_id: gsubId(def.block, def.subs[i].k),
         edge_type: "sequence", notes: null,
       });
     }
