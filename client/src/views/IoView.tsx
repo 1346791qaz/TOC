@@ -3,9 +3,11 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Download, Upload } from "lucide-react";
 import { parseCsv } from "@shared/csv";
 import { api } from "@/lib/api";
+import { cn } from "@/lib/utils";
 import { ViewShell } from "@/components/ViewShell";
 import { Badge, Button, Card, Field, Select, Textarea } from "@/components/ui/primitives";
 
+// ── template definitions ──────────────────────────────────────────────────────
 interface TemplateInfo {
   label: string;
   csv: string;
@@ -27,7 +29,7 @@ const TEMPLATES: Record<string, TemplateInfo> = {
       "name,role_title,function,scope_level,responsibilities,authority_notes",
       "Jane Smith,Operations Manager,Supply Chain,stream,Reviews and approves all orders,Can approve up to $50k",
     ].join("\n"),
-    hint: "scope_level must be one of: local | stream | system",
+    hint: "scope_level: local | stream | system",
   },
   data_elements: {
     label: "Data elements",
@@ -44,7 +46,7 @@ const TEMPLATES: Record<string, TemplateInfo> = {
       "The process runs 5 days a week,unvalidated,",
       "All orders arrive by email,supported,Confirmed with ops team in kickoff",
     ].join("\n"),
-    hint: "status must be one of: unvalidated | supported | refuted",
+    hint: "status: unvalidated | supported | refuted",
   },
   metrics: {
     label: "Metrics",
@@ -65,6 +67,30 @@ const TEMPLATES: Record<string, TemplateInfo> = {
   },
 };
 
+function incomingLabel(kind: string, row: Record<string, unknown>): string {
+  if (kind === "assumptions") return String(row.statement ?? "");
+  if (kind === "constraints") return String(row.title ?? "");
+  if (kind === "data_elements") return `${row.step_name ?? "?"} › ${row.name ?? ""}`;
+  return String(row.name ?? "");
+}
+
+// ── conflict row ──────────────────────────────────────────────────────────────
+interface ConflictItem {
+  rowIndex: number;
+  incoming: Record<string, unknown>;
+  existingId: string;
+  existingKey: string;
+  score: number;
+  action: "skip" | "replace" | "add";
+}
+
+const ACTION_LABELS: Record<ConflictItem["action"], string> = {
+  skip: "Keep existing",
+  replace: "Replace existing",
+  add: "Keep both",
+};
+
+// ── component ─────────────────────────────────────────────────────────────────
 export function IoView({ engagementId, vsId }: { engagementId: string; vsId: string }) {
   const qc = useQueryClient();
   const bundleFileRef = useRef<HTMLInputElement>(null);
@@ -73,8 +99,14 @@ export function IoView({ engagementId, vsId }: { engagementId: string; vsId: str
 
   const [kind, setKind] = useState<keyof typeof TEMPLATES>("process_steps");
   const [raw, setRaw] = useState("");
+
+  // conflict review state
+  const [pendingRows, setPendingRows] = useState<Record<string, unknown>[] | null>(null);
+  const [conflicts, setConflicts] = useState<ConflictItem[] | null>(null);
+  const [cleanCount, setCleanCount] = useState(0);
   const [structuredMsg, setStructuredMsg] = useState<string | null>(null);
 
+  // ── engagement bundle ────────────────────────────────────────────────────
   const exportNow = async () => {
     const bundle = await api.exportEngagement(engagementId);
     const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: "application/json" });
@@ -86,7 +118,7 @@ export function IoView({ engagementId, vsId }: { engagementId: string; vsId: str
     URL.revokeObjectURL(url);
   };
 
-  const importFile = async (file: File) => {
+  const importBundle = async (file: File) => {
     try {
       const bundle = JSON.parse(await file.text());
       const res = await api.importEngagement(bundle);
@@ -101,8 +133,9 @@ export function IoView({ engagementId, vsId }: { engagementId: string; vsId: str
     }
   };
 
+  // ── template download ────────────────────────────────────────────────────
   const downloadTemplate = () => {
-    const { csv, label } = TEMPLATES[kind];
+    const { csv } = TEMPLATES[kind];
     const blob = new Blob([csv + "\n"], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -110,49 +143,99 @@ export function IoView({ engagementId, vsId }: { engagementId: string; vsId: str
     a.download = `template-${kind}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-    void label;
   };
 
-  const runImport = async (rows: Record<string, unknown>[]) => {
+  // ── preview + conflict resolution ────────────────────────────────────────
+  const resetConflicts = () => {
+    setPendingRows(null);
+    setConflicts(null);
+    setCleanCount(0);
+  };
+
+  const startPreview = async (rows: Record<string, unknown>[]) => {
     setStructuredMsg(null);
-    if (rows.length === 0) {
-      setStructuredMsg("No data rows found.");
-      return;
-    }
+    resetConflicts();
+    if (rows.length === 0) { setStructuredMsg("No data rows found."); return; }
+
     try {
-      const res = await api.importStructured({ value_stream_id: vsId, kind, rows });
+      const preview = await api.previewStructured({ value_stream_id: vsId, kind, rows });
+      if (preview.conflicts.length === 0) {
+        // Nothing flagged — import directly.
+        await doImport(rows, []);
+      } else {
+        // Park rows and show conflict review.
+        setPendingRows(rows);
+        setConflicts(
+          preview.conflicts.map((c) => ({ ...c, action: "add" as const })),
+        );
+        setCleanCount(preview.totalRows - preview.conflicts.length);
+      }
+    } catch (e) {
+      setStructuredMsg(`Check failed: ${(e as Error).message}`);
+    }
+  };
+
+  const setConflictAction = (rowIndex: number, action: ConflictItem["action"]) => {
+    setConflicts((prev) =>
+      prev ? prev.map((c) => (c.rowIndex === rowIndex ? { ...c, action } : c)) : prev,
+    );
+  };
+
+  const confirmImport = async () => {
+    if (!pendingRows || !conflicts) return;
+    const resolutions = conflicts.map((c) => ({
+      rowIndex: c.rowIndex,
+      action: c.action,
+      existingId: c.existingId,
+    }));
+    await doImport(pendingRows, resolutions);
+    resetConflicts();
+  };
+
+  const doImport = async (
+    rows: Record<string, unknown>[],
+    resolutions: Array<{ rowIndex: number; action: "skip" | "replace" | "add"; existingId?: string }>,
+  ) => {
+    try {
+      const res = await api.importStructured({ value_stream_id: vsId, kind, rows, resolutions });
       qc.invalidateQueries();
+      const parts: string[] = [];
+      if (res.created) parts.push(`${res.created} created`);
+      if (res.replaced) parts.push(`${res.replaced} replaced`);
+      if (res.skipped) parts.push(`${res.skipped} skipped`);
       const warn = res.warnings.length ? ` Warnings: ${res.warnings.join("; ")}` : "";
-      setStructuredMsg(`Created ${res.created}, skipped ${res.skipped}.${warn}`);
-      if (res.created > 0) setRaw("");
+      setStructuredMsg(parts.join(", ") + "." + warn);
+      if (res.created + res.replaced > 0) setRaw("");
     } catch (e) {
       setStructuredMsg(`Import failed: ${(e as Error).message}`);
     }
   };
 
   const handleCsvUpload = async (file: File) => {
-    const text = await file.text();
-    await runImport(parseCsv(text));
+    const rows = parseCsv(await file.text());
+    await startPreview(rows);
     if (csvFileRef.current) csvFileRef.current.value = "";
   };
 
   const runStructured = async () => {
     const text = raw.trim();
     const rows = text.startsWith("[") ? JSON.parse(text) : parseCsv(text);
-    await runImport(rows);
+    await startPreview(rows);
   };
 
+  // ── render ───────────────────────────────────────────────────────────────
   return (
     <ViewShell
       title="Import / Export"
-      subtitle="Portable JSON is the v1 handoff mechanism. Bulk CSV import for all six entity types."
+      subtitle="Portable JSON for full engagement handoff. Bulk CSV import with duplicate detection for all six entity types."
     >
       <div className="grid grid-cols-2 gap-4">
+        {/* Engagement bundle */}
         <Card>
           <h3 className="mb-1 text-sm font-semibold">Engagement bundle</h3>
           <p className="mb-3 text-xs text-muted-foreground">
-            Export the whole engagement as a portable JSON file, or import one into this database
-            (re-importing a bundle that already exists remaps ids automatically).
+            Export the whole engagement as a portable JSON file, or import one (re-importing remaps
+            ids automatically to avoid collisions).
           </p>
           <div className="flex gap-2">
             <Button size="sm" onClick={exportNow}>
@@ -166,14 +249,15 @@ export function IoView({ engagementId, vsId }: { engagementId: string; vsId: str
               type="file"
               accept="application/json"
               className="hidden"
-              onChange={(e) => e.target.files?.[0] && importFile(e.target.files[0])}
+              onChange={(e) => e.target.files?.[0] && importBundle(e.target.files[0])}
             />
           </div>
           {importMsg && <p className="mt-2 text-xs text-muted-foreground">{importMsg}</p>}
         </Card>
 
+        {/* Bulk CSV import */}
         <Card>
-          <div className="mb-1 flex items-center gap-2">
+          <div className="mb-3 flex items-center gap-2">
             <h3 className="text-sm font-semibold">Bulk CSV import</h3>
             <Badge tone="info">Steps · Personas · Data · Assumptions · Metrics · Constraints</Badge>
           </div>
@@ -185,6 +269,7 @@ export function IoView({ engagementId, vsId }: { engagementId: string; vsId: str
                 onChange={(e) => {
                   setKind(e.target.value as never);
                   setStructuredMsg(null);
+                  resetConflicts();
                 }}
               >
                 {Object.entries(TEMPLATES).map(([k, t]) => (
@@ -208,47 +293,127 @@ export function IoView({ engagementId, vsId }: { engagementId: string; vsId: str
               </p>
             </div>
 
-            <div>
-              <p className="mb-2 text-xs font-medium">Step 2 — Upload your filled-in CSV</p>
-              <Button
-                size="sm"
-                onClick={() => csvFileRef.current?.click()}
-              >
-                <Upload size={14} /> Upload CSV file
-              </Button>
-              <input
-                ref={csvFileRef}
-                type="file"
-                accept=".csv,text/csv"
-                className="hidden"
-                onChange={(e) => e.target.files?.[0] && handleCsvUpload(e.target.files[0])}
-              />
-            </div>
-
-            <details className="text-xs">
-              <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
-                Or paste CSV / JSON text directly
-              </summary>
-              <div className="mt-2 space-y-2">
-                <Textarea
-                  value={raw}
-                  onChange={(e) => setRaw(e.target.value)}
-                  placeholder={`Paste ${TEMPLATES[kind].label} rows…`}
-                  className="min-h-[100px] font-mono text-xs"
-                />
-                <Button size="sm" onClick={runStructured} disabled={!raw.trim()}>
-                  Import rows
+            {!conflicts && (
+              <div>
+                <p className="mb-2 text-xs font-medium">Step 2 — Upload your filled-in CSV</p>
+                <Button size="sm" onClick={() => csvFileRef.current?.click()}>
+                  <Upload size={14} /> Upload CSV file
                 </Button>
+                <input
+                  ref={csvFileRef}
+                  type="file"
+                  accept=".csv,text/csv"
+                  className="hidden"
+                  onChange={(e) => e.target.files?.[0] && handleCsvUpload(e.target.files[0])}
+                />
               </div>
-            </details>
+            )}
+
+            {!conflicts && (
+              <details className="text-xs">
+                <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+                  Or paste CSV / JSON text directly
+                </summary>
+                <div className="mt-2 space-y-2">
+                  <Textarea
+                    value={raw}
+                    onChange={(e) => setRaw(e.target.value)}
+                    placeholder={`Paste ${TEMPLATES[kind].label} rows…`}
+                    className="min-h-[100px] font-mono text-xs"
+                  />
+                  <Button size="sm" onClick={runStructured} disabled={!raw.trim()}>
+                    Check &amp; import
+                  </Button>
+                </div>
+              </details>
+            )}
+
+            {/* Conflict review panel */}
+            {conflicts && conflicts.length > 0 && (
+              <div className="space-y-3">
+                <div>
+                  <p className="text-xs font-semibold">
+                    {conflicts.length} possible duplicate{conflicts.length !== 1 ? "s" : ""} found
+                  </p>
+                  {cleanCount > 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      {cleanCount} row{cleanCount !== 1 ? "s" : ""} have no match and will be
+                      imported automatically.
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-2 max-h-[320px] overflow-y-auto pr-1">
+                  {conflicts.map((c) => (
+                    <div
+                      key={c.rowIndex}
+                      className="rounded border bg-muted/10 p-3 space-y-2 text-xs"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-amber-700 dark:text-amber-400">
+                          {Math.round(c.score * 100)}% similar
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <p className="mb-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                            Existing
+                          </p>
+                          <p className="font-medium">{c.existingKey}</p>
+                        </div>
+                        <div>
+                          <p className="mb-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                            Incoming (CSV)
+                          </p>
+                          <p className="font-medium">{incomingLabel(kind, c.incoming)}</p>
+                        </div>
+                      </div>
+                      <div className="flex gap-1">
+                        {(["skip", "replace", "add"] as const).map((a) => (
+                          <button
+                            key={a}
+                            onClick={() => setConflictAction(c.rowIndex, a)}
+                            className={cn(
+                              "rounded border px-2 py-1 text-[11px] transition-colors",
+                              c.action === a
+                                ? "border-primary bg-primary text-primary-foreground"
+                                : "border-muted-foreground/30 bg-background hover:bg-muted/30",
+                            )}
+                          >
+                            {ACTION_LABELS[a]}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={confirmImport}>
+                    Confirm import
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      resetConflicts();
+                      setStructuredMsg(null);
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
 
             {structuredMsg && (
               <p
-                className={`text-xs ${
-                  structuredMsg.startsWith("Import failed")
+                className={cn(
+                  "text-xs",
+                  structuredMsg.startsWith("Import failed") || structuredMsg.startsWith("Check failed")
                     ? "text-destructive"
-                    : "text-muted-foreground"
-                }`}
+                    : "text-muted-foreground",
+                )}
               >
                 {structuredMsg}
               </p>

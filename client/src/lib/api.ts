@@ -71,9 +71,27 @@ export const api = {
       `/io/import`,
       { method: "POST", body: JSON.stringify(bundle) },
     ),
-  importStructured: (payload: { value_stream_id: string; kind: string; rows: unknown[] }) =>
-    request<{ created: number; skipped: number; warnings: string[] }>(`/io/import-structured`, {
-      method: "POST",
-      body: JSON.stringify(payload),
-    }),
+  previewStructured: (payload: { value_stream_id: string; kind: string; rows: unknown[] }) =>
+    request<{
+      kind: string;
+      totalRows: number;
+      conflicts: Array<{
+        rowIndex: number;
+        incoming: Record<string, unknown>;
+        existingId: string;
+        existingKey: string;
+        score: number;
+      }>;
+    }>(`/io/import-structured/preview`, { method: "POST", body: JSON.stringify(payload) }),
+
+  importStructured: (payload: {
+    value_stream_id: string;
+    kind: string;
+    rows: unknown[];
+    resolutions?: Array<{ rowIndex: number; action: "skip" | "replace" | "add"; existingId?: string }>;
+  }) =>
+    request<{ created: number; replaced: number; skipped: number; warnings: string[] }>(
+      `/io/import-structured`,
+      { method: "POST", body: JSON.stringify(payload) },
+    ),
 };
