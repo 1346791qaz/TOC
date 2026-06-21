@@ -41,6 +41,7 @@ function dataEl(id: string, step_id: string, extra: Partial<DataElement> = {}): 
     business_description: null,
     binding_point: "entry",
     data_type: null,
+    length: null,
     source_system: null,
     table_or_view: null,
     field_name: null,

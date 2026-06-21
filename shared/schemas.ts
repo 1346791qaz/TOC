@@ -152,6 +152,7 @@ export const dataElement = makeEntity({
   business_description: nullableText,
   binding_point: bindingPointSchema.default("entry"),
   data_type: nullableText,
+  length: nullableText,
   source_system: nullableText,
   // Physical location of the data point: source table/view on entry, target on
   // action/exit (per binding_point).

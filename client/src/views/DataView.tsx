@@ -111,6 +111,9 @@ export function DataView({ vsId }: { vsId: string }) {
                 <Td className="mono text-xs text-accent">{loc || "—"}</Td>
                 <Td className="text-xs text-muted-foreground">
                   {d.data_type ?? "—"}
+                  {d.length && (
+                    <span className="text-muted-foreground/70"> ({d.length})</span>
+                  )}
                   {d.example_value && (
                     <span className="block truncate text-[10px] text-muted-foreground/70">
                       e.g. {d.example_value}

@@ -1,7 +1,9 @@
 import { useState } from "react";
 import type { FieldDef } from "@/lib/entityConfig";
+import { resolveTypeOptions } from "@/lib/entityConfig";
 import { titleCase } from "@/lib/display";
 import { Field, Input, Select, Textarea } from "@/components/ui/primitives";
+import { Combobox } from "@/components/ui/Combobox";
 
 export interface DynamicOption {
   value: string;
@@ -23,7 +25,7 @@ function coerce(field: FieldDef, raw: string | boolean): unknown {
     const s = String(raw);
     return s === "" ? undefined : s;
   }
-  // text / textarea
+  // text / textarea / combobox
   const s = String(raw);
   if (s.trim() === "") return field.required ? "" : null;
   return s;
@@ -121,6 +123,18 @@ export function EntityForm({
                   ),
                 )}
               </Select>
+            ) : f.type === "combobox" ? (
+              <Combobox
+                data-testid={`field-${f.name}`}
+                value={String(values[f.name] ?? "")}
+                onChange={(v) => set(f.name, v)}
+                options={
+                  f.dependsOn
+                    ? resolveTypeOptions(String(values[f.dependsOn] ?? ""))
+                    : (f.comboOptions ?? [])
+                }
+                placeholder={f.placeholder}
+              />
             ) : (
               <Input
                 data-testid={`field-${f.name}`}
