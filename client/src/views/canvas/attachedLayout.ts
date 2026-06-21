@@ -11,26 +11,25 @@ import { severityRank } from "@/lib/display";
 import type { ConstraintBadge, OilNodeData } from "./buildGraph";
 
 // ---------------------------------------------------------------------------
-// "Attached cells" layout with INLINE drill-down. Top-level steps are columns
-// left-to-right; each step's personas and data hang beneath it. A step with
-// sub-steps can be expanded, and its sub-steps render nested directly below it
-// (growing downward, indented), recursively — so the whole value stream stays
-// visible while you drill into any step. Each top column sits in a faded domain
-// lane (owner = the executor's Function/Dept).
+// "Attached cells" layout with INLINE, HORIZONTAL drill-down. Top-level steps
+// are columns left-to-right; each step's personas and data hang beneath it.
+// Expanding a step lays its sub-steps out as their own left-to-right mini-spine
+// in a band directly below the step, and the step's slot WIDENS to fit them
+// (recursively) — so later steps shift right and the whole value stream, with
+// any expanded detail, stays in one left-to-right view. Each top column sits in
+// a faded domain lane (owner = the executor's Function/Dept).
 // ---------------------------------------------------------------------------
 
 const STEP_W = 220;
 const STEP_H = 96;
-const COL_SPACING = 300;
+const COLUMN_WIDTH = 300; // collapsed slot width (node + margin to next step)
 const CELL_W = 200;
 const CELL_X = (STEP_W - CELL_W) / 2;
 const PERSONA_H = 48;
 const DATA_H = 44;
 const CELL_GAP = 8;
 const SECTION_GAP = 16;
-const SUBSTEP_GAP = 14;
-const INDENT = 18;
-const MAX_INDENT_DEPTH = 4;
+const BAND_GAP = 26; // gap between a step's cells and its sub-step band
 const DOMAIN_PAD = 12;
 const LANE_HEADER = 28;
 
@@ -51,13 +50,6 @@ export interface DomainColor {
   text: string;
 }
 
-export function deptHue(dept: string): number {
-  let h = 0;
-  for (let i = 0; i < dept.length; i++) h = (h * 31 + dept.charCodeAt(i)) % 360;
-  return h;
-}
-
-/** Unique, evenly-spaced color per domain (no repetition across domains). */
 export function buildDomainPalette(domains: string[]): Map<string, DomainColor> {
   const distinct = [...new Set(domains)].sort((a, b) => a.localeCompare(b));
   const map = new Map<string, DomainColor>();
@@ -80,7 +72,7 @@ const GRAY: DomainColor = {
 };
 
 export interface AttachedInput {
-  steps: ProcessStep[]; // all steps in the value stream (top-level + sub-steps)
+  steps: ProcessStep[];
   personas: Persona[];
   dataElements: DataElement[];
   stepPersonas: StepPersona[];
@@ -103,7 +95,6 @@ export function buildAttachedGraph(input: AttachedInput): {
   const colorFor = (domain: string): DomainColor =>
     domain === UNOWNED ? GRAY : palette.get(domain) ?? GRAY;
 
-  // children index
   const childrenOf = new Map<string, ProcessStep[]>();
   for (const s of steps) {
     if (!s.parent_step_id) continue;
@@ -113,7 +104,6 @@ export function buildAttachedGraph(input: AttachedInput): {
   }
   for (const arr of childrenOf.values()) arr.sort((a, b) => a.sequence_index - b.sequence_index);
 
-  // constraint badges
   const badges = new Map<string, ConstraintBadge>();
   for (const c of constraints) {
     if (!c.target_id) continue;
@@ -126,26 +116,30 @@ export function buildAttachedGraph(input: AttachedInput): {
   const badgeFor = (id: string) => (layers.constraints ? badges.get(id) : undefined);
 
   const ownerDomainOf = (step: ProcessStep): string => {
-    const exec = stepPersonas.find(
-      (sp) => sp.step_id === step.id && sp.role_on_step === "executor",
-    );
+    const exec = stepPersonas.find((sp) => sp.step_id === step.id && sp.role_on_step === "executor");
     return exec ? domainOf(personaById.get(exec.persona_id)) : UNOWNED;
   };
 
   const laneNodes: Node<OilNodeData>[] = [];
   const cellNodes: Node<OilNodeData>[] = [];
+  const placed = new Set<string>();
 
-  // Recursively lay out a step (and, if expanded, its sub-steps) within a
-  // column starting at baseX, returning the bottom Y reached.
-  function layoutStep(step: ProcessStep, baseX: number, depth: number, startY: number): number {
-    const indent = Math.min(depth, MAX_INDENT_DEPTH) * INDENT;
-    const x = baseX + indent;
+  // Lay out a step at (x, y); if expanded, its sub-steps form a left-to-right
+  // band beneath it. Returns the slot width consumed and the bottom Y reached.
+  function layoutStep(
+    step: ProcessStep,
+    x: number,
+    y: number,
+    depth: number,
+  ): { width: number; bottom: number } {
+    placed.add(step.id);
     const kids = childrenOf.get(step.id) ?? [];
+    const isOpen = expanded.has(step.id) && kids.length > 0;
 
     cellNodes.push({
       id: `step:${step.id}`,
       type: "step",
-      position: { x, y: startY },
+      position: { x, y },
       zIndex: 2,
       data: {
         label: step.name,
@@ -161,7 +155,7 @@ export function buildAttachedGraph(input: AttachedInput): {
       },
     });
 
-    let cursorY = startY + STEP_H + SECTION_GAP;
+    let cursorY = y + STEP_H + SECTION_GAP;
     const cellX = x + CELL_X;
 
     if (layers.personas) {
@@ -217,16 +211,20 @@ export function buildAttachedGraph(input: AttachedInput): {
       }
     }
 
-    // Expanded → nest sub-steps directly beneath, growing downward.
-    if (expanded.has(step.id) && kids.length) {
-      cursorY += 4;
-      for (const child of kids) {
-        cursorY = layoutStep(child, baseX, depth + 1, cursorY) + SUBSTEP_GAP;
-      }
-      cursorY -= SUBSTEP_GAP;
-    }
+    const cellsBottom = cursorY;
+    if (!isOpen) return { width: COLUMN_WIDTH, bottom: cellsBottom };
 
-    return cursorY;
+    // Sub-steps: left-to-right band directly below this step's cells.
+    const bandY = cellsBottom + BAND_GAP;
+    let childX = x;
+    let maxBottom = bandY;
+    for (const child of kids) {
+      const res = layoutStep(child, childX, bandY, depth + 1);
+      childX += res.width;
+      maxBottom = Math.max(maxBottom, res.bottom);
+    }
+    const width = Math.max(COLUMN_WIDTH, childX - x);
+    return { width, bottom: maxBottom };
   }
 
   const sortedTop = steps
@@ -236,19 +234,21 @@ export function buildAttachedGraph(input: AttachedInput): {
   interface Meta {
     step: ProcessStep;
     x: number;
+    width: number;
+    bottom: number;
     ownerDomain: string;
     ownerColor: DomainColor;
-    bottom: number;
   }
   const meta: Meta[] = [];
-  sortedTop.forEach((step, i) => {
-    const x = i * COL_SPACING;
-    const bottom = layoutStep(step, x, 0, 0);
+  let runningX = 0;
+  for (const step of sortedTop) {
+    const res = layoutStep(step, runningX, 0, 0);
     const ownerDomain = ownerDomainOf(step);
-    meta.push({ step, x, ownerDomain, ownerColor: colorFor(ownerDomain), bottom });
-  });
+    meta.push({ step, x: runningX, width: res.width, bottom: res.bottom, ownerDomain, ownerColor: colorFor(ownerDomain) });
+    runningX += res.width;
+  }
 
-  // Merge consecutive same-domain top columns into one labeled lane.
+  // Merge consecutive same-domain top slots into one labeled lane.
   let r = 0;
   while (r < meta.length) {
     const dom = meta[r].ownerDomain;
@@ -256,7 +256,7 @@ export function buildAttachedGraph(input: AttachedInput): {
     while (e + 1 < meta.length && meta[e + 1].ownerDomain === dom) e++;
     const run = meta.slice(r, e + 1);
     const left = run[0].x - DOMAIN_PAD;
-    const right = run[run.length - 1].x + STEP_W + DOMAIN_PAD;
+    const right = run[run.length - 1].x + run[run.length - 1].width - (COLUMN_WIDTH - STEP_W) + DOMAIN_PAD;
     const top = -LANE_HEADER;
     const maxBottom = Math.max(...run.map((m) => m.bottom));
     const color = run[0].ownerColor;
@@ -264,7 +264,7 @@ export function buildAttachedGraph(input: AttachedInput): {
       id: `lane:${run[0].step.id}`,
       type: "deptBg",
       position: { x: left, y: top },
-      style: { width: right - left, height: maxBottom + DOMAIN_PAD - top },
+      style: { width: Math.max(STEP_W + DOMAIN_PAD * 2, right - left), height: maxBottom + DOMAIN_PAD - top },
       selectable: false,
       draggable: false,
       zIndex: 0,
@@ -281,12 +281,13 @@ export function buildAttachedGraph(input: AttachedInput): {
     r = e + 1;
   }
 
-  // Top-level sequence edges only (nesting conveys the sub-step sequence).
-  const topIds = new Set(sortedTop.map((s) => s.id));
+  // Edges between any two currently-visible steps: the top-level spine plus the
+  // mini-spine of each expanded step (siblings sit side-by-side, so arrows read
+  // left-to-right). Covers sequence and cross-cutting dependency edges.
   const outEdges: Edge[] = [];
   for (const ed of edges) {
     if (ed.from_type !== "step" || ed.to_type !== "step") continue;
-    if (!topIds.has(ed.from_id) || !topIds.has(ed.to_id)) continue;
+    if (!placed.has(ed.from_id) || !placed.has(ed.to_id)) continue;
     const style = EDGE_STYLE[ed.edge_type] ?? EDGE_STYLE.sequence;
     outEdges.push({
       id: `fe-${ed.id}`,
