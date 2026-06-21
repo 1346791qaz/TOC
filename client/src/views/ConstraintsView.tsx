@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useCallback, useState } from "react";
 import { AlertTriangle, Plus } from "lucide-react";
 import type {
   Constraint,
@@ -18,7 +18,7 @@ import {
 import { useCreate, useList, useSystemConstraintCheck, useUpdate } from "@/lib/queries";
 import { ApiError } from "@/lib/api";
 import { severityTone, titleCase, tocLabels } from "@/lib/display";
-import { ViewShell, Table, Tr, Td, EmptyHint } from "@/components/ViewShell";
+import { ViewShell, SearchBar, Table, Tr, Td, EmptyHint, type SortDir } from "@/components/ViewShell";
 import { Badge, Button, Field, Input, Select, Textarea } from "@/components/ui/primitives";
 import { Modal } from "@/components/ui/modal";
 import { RowActions } from "@/components/RowActions";
@@ -31,22 +31,65 @@ const kindTone = {
   seam: "info",
 } as const;
 
+const COLS = ["Title", "Kind", "Target", "Severity", "ToC stage", "System", ""] as const;
+
+function getVal(c: Constraint, col: string): string {
+  switch (col) {
+    case "Title": return c.title ?? "";
+    case "Kind": return c.kind ?? "";
+    case "Target": return c.target_type ?? "";
+    case "Severity": return c.severity ?? "";
+    case "ToC stage": return tocLabels[c.toc_status] ?? "";
+    case "System": return c.is_system_constraint ? "system" : "";
+    default: return "";
+  }
+}
+
 export function ConstraintsView({ vsId }: { vsId: string }) {
   const constraints = useList<Constraint>("constraints", { where: { value_stream_id: vsId } });
   const check = useSystemConstraintCheck(vsId);
   const [editing, setEditing] = useState<Constraint | null>(null);
   const [creating, setCreating] = useState(false);
+  const [query, setQuery] = useState("");
+  const [sortCol, setSortCol] = useState<string>("");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
 
-  const rows = constraints.data ?? [];
+  const handleSort = useCallback((col: string) => {
+    setSortCol((prev) => {
+      if (prev === col) { setSortDir((d) => (d === "asc" ? "desc" : "asc")); return prev; }
+      setSortDir("asc"); return col;
+    });
+  }, []);
+
+  const rows = useMemo(() => {
+    let data = constraints.data ?? [];
+    if (query.trim()) {
+      const q = query.trim().toLowerCase();
+      data = data.filter((c) =>
+        COLS.slice(0, -1).some((col) => getVal(c, col).toLowerCase().includes(q))
+      );
+    }
+    if (sortCol) {
+      data = [...data].sort((a, b) => {
+        const av = getVal(a, sortCol).toLowerCase();
+        const bv = getVal(b, sortCol).toLowerCase();
+        return sortDir === "asc" ? av.localeCompare(bv) : bv.localeCompare(av);
+      });
+    }
+    return data;
+  }, [constraints.data, query, sortCol, sortDir]);
 
   return (
     <ViewShell
       title="Constraint Register"
       subtitle="Constraints, risks, breakdowns, pain points and seams — attachable to any node or edge."
       actions={
-        <Button size="sm" onClick={() => setCreating(true)}>
-          <Plus size={14} /> Constraint
-        </Button>
+        <>
+          <SearchBar value={query} onChange={setQuery} placeholder="Search constraints…" />
+          <Button size="sm" onClick={() => setCreating(true)}>
+            <Plus size={14} /> Constraint
+          </Button>
+        </>
       }
     >
       {check.data?.warning && (
@@ -57,9 +100,9 @@ export function ConstraintsView({ vsId }: { vsId: string }) {
       )}
 
       {rows.length === 0 ? (
-        <EmptyHint>No constraints logged yet.</EmptyHint>
+        <EmptyHint>{query ? `No constraints matching "${query}".` : "No constraints logged yet."}</EmptyHint>
       ) : (
-        <Table columns={["Title", "Kind", "Target", "Severity", "ToC stage", "System", ""]}>
+        <Table columns={[...COLS]} sortCol={sortCol} sortDir={sortDir} onSort={handleSort}>
           {rows.map((c) => (
             <Tr key={c.id} active={c.is_system_constraint}>
               <Td className="max-w-xs font-medium">{c.title}</Td>
