@@ -27,10 +27,11 @@ export function Combobox({
     setQuery(value);
   }, [value]);
 
+  const sorted = [...options].sort((a, b) => a.localeCompare(b));
   const filtered =
     query.trim() === ""
-      ? options
-      : options.filter((o) => o.toLowerCase().includes(query.toLowerCase()));
+      ? sorted
+      : sorted.filter((o) => o.toLowerCase().includes(query.toLowerCase()));
 
   function handleSelect(opt: string) {
     setQuery(opt);
