@@ -67,7 +67,7 @@ export function Combobox({
         className={cn(fieldBase, className)}
       />
       {open && filtered.length > 0 && (
-        <ul className="absolute z-50 mt-1 max-h-52 w-full overflow-auto rounded-md border border-border bg-popover py-1 text-sm shadow-md">
+        <ul className="absolute z-50 mt-1 max-h-52 w-full overflow-auto rounded-md border border-border bg-surface-raised py-1 text-sm shadow-md">
           {filtered.map((opt) => (
             <li
               key={opt}
