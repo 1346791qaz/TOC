@@ -13,7 +13,7 @@ import {
   type Edge,
   type Node,
 } from "@xyflow/react";
-import { Plus } from "lucide-react";
+import { ChevronsDownUp, ChevronsUpDown, Plus } from "lucide-react";
 import { EDGE_TYPES, type EdgeType, type FlowNodeType } from "@shared/enums";
 import type {
   Constraint,
@@ -30,11 +30,9 @@ import { cn } from "@/lib/utils";
 import { titleCase } from "@/lib/display";
 import { processStepFields } from "@/lib/entityConfig";
 import { Button, Select } from "@/components/ui/primitives";
-import { StepBreadcrumb } from "@/components/StepBreadcrumb";
 import { EntityModalForm } from "@/components/EntityModalForm";
 import { buildGraph, type OilNodeData } from "./canvas/buildGraph";
 import { buildAttachedGraph } from "./canvas/attachedLayout";
-import { buildStepPath, childCountByParent, stepsAtLevel } from "./canvas/hierarchy";
 import { layoutElk } from "./canvas/layout";
 import { nodeTypes } from "./canvas/nodes";
 import { DetailDrawer } from "./canvas/DetailDrawer";
@@ -46,7 +44,8 @@ const LAYOUT_MODES: { value: LayoutMode; label: string }[] = [
 ];
 
 function CanvasInner({ vsId }: { vsId: string }) {
-  const { layoutMode, layers, stepPath, setLayoutMode, toggleLayer, setStepPath } = useUi();
+  const { layoutMode, layers, expandedSteps, setLayoutMode, toggleLayer, toggleExpand, setExpanded } =
+    useUi();
   const { fitView } = useReactFlow();
 
   const valueStreams = useList<ValueStream>("value_streams");
@@ -64,67 +63,51 @@ function CanvasInner({ vsId }: { vsId: string }) {
   const [rfEdges, setRfEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [selected, setSelected] = useState<OilNodeData | null>(null);
   const [newEdgeType, setNewEdgeType] = useState<EdgeType>("dependency");
-  const [addingStep, setAddingStep] = useState(false);
+  const [addParent, setAddParent] = useState<string | null | undefined>(undefined); // undefined = closed
   const createEdge = useCreate<FlowEdge>("flow_edges");
   const deleteEdge = useSoftDelete("flow_edges");
 
   const allSteps = useMemo(() => steps.data ?? [], [steps.data]);
-  const parentStepId = stepPath.at(-1)?.id ?? null;
-  const levelSteps = useMemo(() => stepsAtLevel(allSteps, parentStepId), [allSteps, parentStepId]);
-  const childCount = useMemo(() => childCountByParent(allSteps), [allSteps]);
+  const allStepIds = useMemo(() => new Set(allSteps.map((s) => s.id)), [allSteps]);
+  const expandedSet = useMemo(() => new Set(expandedSteps), [expandedSteps]);
+  const parentsWithKids = useMemo(
+    () => [...new Set(allSteps.filter((s) => s.parent_step_id).map((s) => s.parent_step_id!))],
+    [allSteps],
+  );
   const vsName = valueStreams.data?.find((v) => v.id === vsId)?.name ?? "Value stream";
 
-  const drillInto = (stepId: string) => {
-    setStepPath(buildStepPath(stepId, allSteps));
-    setSelected(null);
-  };
-
-  // Manually add cross-cutting dependency edges by dragging between node handles.
   const onConnect = (c: Connection) => {
     if (!c.source || !c.target || c.source === c.target) return;
     const [fromType, fromId] = c.source.split(/:(.+)/) as [FlowNodeType, string];
     const [toType, toId] = c.target.split(/:(.+)/) as [FlowNodeType, string];
     createEdge.mutate({
-      value_stream_id: vsId,
-      from_type: fromType,
-      from_id: fromId,
-      to_type: toType,
-      to_id: toId,
-      edge_type: newEdgeType,
-      notes: null,
+      value_stream_id: vsId, from_type: fromType, from_id: fromId,
+      to_type: toType, to_id: toId, edge_type: newEdgeType, notes: null,
     });
   };
-
   const onEdgesDelete = (deleted: Edge[]) => {
-    for (const e of deleted) {
-      if (e.id.startsWith("fe-")) deleteEdge.mutate(e.id.slice(3));
-    }
+    for (const e of deleted) if (e.id.startsWith("fe-")) deleteEdge.mutate(e.id.slice(3));
   };
-
-  const levelStepIds = useMemo(() => new Set(levelSteps.map((s) => s.id)), [levelSteps]);
 
   const ready =
     steps.data && personas.data && allData.data && allStepPersonas.data && constraints.data && edges.data;
 
   useEffect(() => {
     if (!ready) return;
-    // Only the cells/edges belonging to the current drill level are shown.
-    const dataElements = (allData.data ?? []).filter((d) => levelStepIds.has(d.step_id));
-    const stepPersonas = (allStepPersonas.data ?? []).filter((sp) => levelStepIds.has(sp.step_id));
+    const dataElements = (allData.data ?? []).filter((d) => allStepIds.has(d.step_id));
+    const stepPersonas = (allStepPersonas.data ?? []).filter((sp) => allStepIds.has(sp.step_id));
     const refit = () => setTimeout(() => fitView({ padding: 0.2, duration: 300 }), 50);
 
-    // "Full OIL" uses the attached-cell layout (personas/data hang under their
-    // step, dept swimlanes behind personas) — computed synchronously, no elk.
     if (layoutMode === "full") {
       const graph = buildAttachedGraph({
-        steps: levelSteps,
+        steps: allSteps,
         personas: personas.data ?? [],
         dataElements,
         stepPersonas,
         constraints: constraints.data ?? [],
         edges: edges.data ?? [],
         layers,
-        childCount,
+        expanded: expandedSet,
       });
       setNodes(graph.nodes);
       setRfEdges(graph.edges);
@@ -132,9 +115,10 @@ function CanvasInner({ vsId }: { vsId: string }) {
       return;
     }
 
-    // Spine / constraint-focus keep the elk layered layout.
+    // Spine / constraint-focus: top-level steps only, elk layered layout.
+    const topSteps = allSteps.filter((s) => !s.parent_step_id);
     const graph = buildGraph({
-      steps: levelSteps,
+      steps: topSteps,
       personas: personas.data ?? [],
       dataElements,
       stepPersonas,
@@ -142,7 +126,6 @@ function CanvasInner({ vsId }: { vsId: string }) {
       edges: edges.data ?? [],
       layoutMode,
       layers,
-      childCount,
     });
     let cancelled = false;
     layoutElk(graph.nodes, graph.edges).then((positioned) => {
@@ -155,23 +138,30 @@ function CanvasInner({ vsId }: { vsId: string }) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, levelSteps, personas.data, allData.data, allStepPersonas.data, constraints.data, edges.data, layoutMode, layers, childCount]);
-
-  const isEmptyLevel = ready && levelSteps.length === 0;
+  }, [ready, allSteps, personas.data, allData.data, allStepPersonas.data, constraints.data, edges.data, layoutMode, layers, expandedSet]);
 
   return (
     <div className="flex h-full">
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* Breadcrumb / add bar */}
+        {/* Header: value stream + expand controls + add */}
         <div className="flex shrink-0 items-center gap-2 border-b border-border bg-surface px-3 py-1.5">
-          <StepBreadcrumb valueStreamName={vsName} />
-          <Button size="sm" variant="subtle" className="ml-auto" onClick={() => setAddingStep(true)}>
-            <Plus size={13} /> {parentStepId ? "Sub-step" : "Step"}
+          <span className="truncate text-sm font-semibold">{vsName}</span>
+          {parentsWithKids.length > 0 && layoutMode === "full" && (
+            <div className="ml-2 flex gap-1">
+              <Button size="sm" variant="ghost" onClick={() => setExpanded(parentsWithKids)}>
+                <ChevronsUpDown size={13} /> Expand all
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setExpanded([])}>
+                <ChevronsDownUp size={13} /> Collapse all
+              </Button>
+            </div>
+          )}
+          <Button size="sm" variant="subtle" className="ml-auto" onClick={() => setAddParent(null)}>
+            <Plus size={13} /> Step
           </Button>
         </div>
 
         <div className="relative min-w-0 flex-1">
-          {/* Toolbar */}
           <div className="absolute left-3 top-3 z-10 flex flex-col gap-2">
             <div className="flex gap-1 rounded-md border border-border bg-surface/90 p-1 backdrop-blur">
               {LAYOUT_MODES.map((m) => (
@@ -201,11 +191,6 @@ function CanvasInner({ vsId }: { vsId: string }) {
                 ))}
               </div>
             )}
-            {layoutMode === "constraint_focus" && (
-              <div className="rounded-md border border-border bg-surface/90 px-2 py-1 text-[11px] text-muted-foreground backdrop-blur">
-                Highlighting the system constraint and everything subordinate (downstream).
-              </div>
-            )}
             <div className="flex items-center gap-1.5 rounded-md border border-border bg-surface/90 p-1 text-[11px] text-muted-foreground backdrop-blur">
               <span className="pl-1">Drag to link · new edge:</span>
               <Select
@@ -220,19 +205,12 @@ function CanvasInner({ vsId }: { vsId: string }) {
                 ))}
               </Select>
             </div>
-            <div className="rounded-md border border-border bg-surface/90 px-2 py-1 text-[11px] text-muted-foreground backdrop-blur">
-              Double-click a step to drill into its sub-steps.
-            </div>
+            {layoutMode === "full" && (
+              <div className="rounded-md border border-border bg-surface/90 px-2 py-1 text-[11px] text-muted-foreground backdrop-blur">
+                Click a step's “sub” toggle (or double-click it) to expand its sub-steps inline.
+              </div>
+            )}
           </div>
-
-          {isEmptyLevel && (
-            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 text-center text-muted-foreground">
-              <p className="text-sm">No sub-steps under “{stepPath.at(-1)?.name}” yet.</p>
-              <Button size="sm" onClick={() => setAddingStep(true)}>
-                <Plus size={14} /> Add the first sub-step
-              </Button>
-            </div>
-          )}
 
           <ReactFlow
             nodes={nodes}
@@ -243,16 +221,18 @@ function CanvasInner({ vsId }: { vsId: string }) {
             onEdgesDelete={onEdgesDelete}
             nodeTypes={nodeTypes}
             onNodeClick={(_, n) => {
-              if (n.type === "deptBg") return; // department backdrop, not selectable
+              if (n.type === "deptBg") return;
               setSelected(n.data as OilNodeData);
             }}
             onNodeDoubleClick={(_, n) => {
               const data = n.data as OilNodeData;
-              if (data.nodeKind === "step" && data.entityId) drillInto(data.entityId);
+              if (data.nodeKind === "step" && data.entityId && data.subStepCount)
+                toggleExpand(data.entityId);
             }}
             onPaneClick={() => setSelected(null)}
             fitView
-            minZoom={0.2}
+            zoomOnDoubleClick={false}
+            minZoom={0.15}
             maxZoom={1.8}
             proOptions={{ hideAttribution: true }}
             className="bg-background"
@@ -279,17 +259,18 @@ function CanvasInner({ vsId }: { vsId: string }) {
         <DetailDrawer
           node={selected}
           onClose={() => setSelected(null)}
-          onDrill={(stepId) => drillInto(stepId)}
+          onAddSub={(stepId) => setAddParent(stepId)}
+          onToggleExpand={(stepId) => toggleExpand(stepId)}
         />
       )}
 
       <EntityModalForm
-        open={addingStep}
-        onClose={() => setAddingStep(false)}
+        open={addParent !== undefined}
+        onClose={() => setAddParent(undefined)}
         entityKey="process_steps"
-        title={parentStepId ? "New Sub-step" : "New Process Step"}
+        title={addParent ? "New Sub-step" : "New Process Step"}
         fields={processStepFields}
-        extra={{ value_stream_id: vsId, parent_step_id: parentStepId }}
+        extra={{ value_stream_id: vsId, parent_step_id: addParent ?? null }}
       />
     </div>
   );

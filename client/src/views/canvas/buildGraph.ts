@@ -32,8 +32,10 @@ export interface OilNodeData extends Record<string, unknown> {
   deptBg?: string;
   isBackground?: boolean;
   isExecutor?: boolean;
-  // Hierarchy: number of direct sub-steps (drives the drill-in affordance).
+  // Hierarchy: number of direct sub-steps + whether expanded inline + depth.
   subStepCount?: number;
+  isExpanded?: boolean;
+  depth?: number;
 }
 
 export const NODE_SIZES: Record<FlowNodeType, { width: number; height: number }> = {

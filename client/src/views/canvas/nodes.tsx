@@ -1,7 +1,8 @@
 import { Handle, Position, type NodeProps } from "@xyflow/react";
-import { AlertTriangle, Database, Layers, User, Workflow } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronRight, Database, User, Workflow } from "lucide-react";
 import { fmtNum } from "@/lib/utils";
 import { presenceTone } from "@/lib/display";
+import { useUi } from "@/store";
 import { Badge } from "@/components/ui/primitives";
 import type { OilNodeData } from "./buildGraph";
 
@@ -31,14 +32,19 @@ export function StepNode({ data, selected }: NodeProps) {
   const s = d.step;
   const queue = s && s.wait_time != null && s.cycle_time != null && s.wait_time > s.cycle_time;
   const missing = 0; // computed badge omitted; gaps shown in report
+  const nested = (d.depth ?? 0) > 0;
+  // Nested sub-steps take their executor-domain color so they read as detail of
+  // the column they live in; top-level steps stay the canonical step blue.
+  const accent = nested ? d.deptColor ?? "hsl(210 70% 55%)" : "hsl(210 70% 55%)";
   return (
     <div
       data-testid="oilnode-step"
       className={baseCard}
       style={{
         width: 210,
-        borderColor: d.constraint?.isSystem ? "hsl(0 80% 58%)" : "hsl(210 70% 55%)",
-        background: "hsl(220 26% 11%)",
+        borderColor: d.constraint?.isSystem ? "hsl(0 80% 58%)" : accent,
+        borderLeftWidth: nested ? 4 : 2,
+        background: nested ? "hsl(220 26% 13%)" : "hsl(220 26% 11%)",
         opacity: d.dimmed ? 0.3 : 1,
         outline: selected ? "2px solid hsl(38 92% 52%)" : undefined,
       }}
@@ -46,7 +52,11 @@ export function StepNode({ data, selected }: NodeProps) {
       <Handle type="target" position={Position.Left} />
       <ConstraintMarker data={d} />
       <div className="flex items-center gap-1.5">
-        <Workflow size={13} style={{ color: "hsl(210 70% 65%)" }} />
+        {nested ? (
+          <span className="text-xs" style={{ color: accent }}>↳</span>
+        ) : (
+          <Workflow size={13} style={{ color: "hsl(210 70% 65%)" }} />
+        )}
         <span className="truncate text-sm font-semibold">{d.label}</span>
       </div>
       <div className="mt-1 flex gap-2 text-[10px] text-muted-foreground">
@@ -62,9 +72,17 @@ export function StepNode({ data, selected }: NodeProps) {
           </Badge>
         )}
         {!!d.subStepCount && (
-          <Badge tone="accent" className="ml-auto" >
-            <Layers size={9} /> {d.subStepCount} sub
-          </Badge>
+          <button
+            className="nodrag ml-auto flex items-center gap-1 rounded border border-primary/40 bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary hover:bg-primary/20"
+            title={d.isExpanded ? "Collapse sub-steps" : "Show sub-steps"}
+            onClick={(ev) => {
+              ev.stopPropagation();
+              useUi.getState().toggleExpand(d.entityId);
+            }}
+          >
+            {d.isExpanded ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+            {d.subStepCount} sub
+          </button>
         )}
       </div>
       <Handle type="source" position={Position.Right} />

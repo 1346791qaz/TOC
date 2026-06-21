@@ -11,14 +11,12 @@ import { severityRank } from "@/lib/display";
 import type { ConstraintBadge, OilNodeData } from "./buildGraph";
 
 // ---------------------------------------------------------------------------
-// "Attached cells" layout: process steps form a left-to-right spine; each
-// step's personas and bound data hang directly beneath it as compact cells.
-//
-// Each step column sits in a faded "domain lane" colored by the domain that
-// OWNS the step — i.e. the Function/Dept of the step's executor persona. This
-// shows which domain owns which process and its data; non-executor personas
-// (approver/consulted/informed) still appear in the column, inside the owner's
-// lane, and carry a small marker in their own domain's color.
+// "Attached cells" layout with INLINE drill-down. Top-level steps are columns
+// left-to-right; each step's personas and data hang beneath it. A step with
+// sub-steps can be expanded, and its sub-steps render nested directly below it
+// (growing downward, indented), recursively — so the whole value stream stays
+// visible while you drill into any step. Each top column sits in a faded domain
+// lane (owner = the executor's Function/Dept).
 // ---------------------------------------------------------------------------
 
 const STEP_W = 220;
@@ -29,9 +27,12 @@ const CELL_X = (STEP_W - CELL_W) / 2;
 const PERSONA_H = 48;
 const DATA_H = 44;
 const CELL_GAP = 8;
-const SECTION_GAP = 18;
+const SECTION_GAP = 16;
+const SUBSTEP_GAP = 14;
+const INDENT = 18;
+const MAX_INDENT_DEPTH = 4;
 const DOMAIN_PAD = 12;
-const LANE_HEADER = 28; // headroom above the step so the lane label isn't hidden
+const LANE_HEADER = 28;
 
 const BINDING_ORDER: Record<string, number> = { entry: 0, action: 1, exit: 2 };
 const ROLE_ORDER: Record<string, number> = { executor: 0, approver: 1, consulted: 2, informed: 3 };
@@ -50,10 +51,13 @@ export interface DomainColor {
   text: string;
 }
 
-/**
- * Assign every distinct domain a unique, evenly-spaced hue (no two domains
- * share a color). Sorted so assignment is stable for a given set of domains.
- */
+export function deptHue(dept: string): number {
+  let h = 0;
+  for (let i = 0; i < dept.length; i++) h = (h * 31 + dept.charCodeAt(i)) % 360;
+  return h;
+}
+
+/** Unique, evenly-spaced color per domain (no repetition across domains). */
 export function buildDomainPalette(domains: string[]): Map<string, DomainColor> {
   const distinct = [...new Set(domains)].sort((a, b) => a.localeCompare(b));
   const map = new Map<string, DomainColor>();
@@ -76,33 +80,40 @@ const GRAY: DomainColor = {
 };
 
 export interface AttachedInput {
-  steps: ProcessStep[];
+  steps: ProcessStep[]; // all steps in the value stream (top-level + sub-steps)
   personas: Persona[];
   dataElements: DataElement[];
   stepPersonas: StepPersona[];
   constraints: Constraint[];
   edges: FlowEdge[];
   layers: { personas: boolean; data: boolean; constraints: boolean };
-  /** parent_step_id -> number of direct sub-steps, for the drill-in marker. */
-  childCount?: Map<string, number>;
+  expanded: Set<string>;
 }
 
 export function buildAttachedGraph(input: AttachedInput): {
   nodes: Node<OilNodeData>[];
   edges: Edge[];
 } {
-  const { steps, personas, dataElements, stepPersonas, constraints, edges, layers, childCount } =
+  const { steps, personas, dataElements, stepPersonas, constraints, edges, layers, expanded } =
     input;
 
   const personaById = new Map(personas.map((p) => [p.id, p]));
   const domainOf = (p: Persona | undefined): string => p?.function ?? "Unassigned";
-
-  // Unique color per persona domain (no repetition across domains).
   const palette = buildDomainPalette(personas.map((p) => domainOf(p)));
   const colorFor = (domain: string): DomainColor =>
     domain === UNOWNED ? GRAY : palette.get(domain) ?? GRAY;
 
-  // Constraint badges per target id.
+  // children index
+  const childrenOf = new Map<string, ProcessStep[]>();
+  for (const s of steps) {
+    if (!s.parent_step_id) continue;
+    const arr = childrenOf.get(s.parent_step_id) ?? [];
+    arr.push(s);
+    childrenOf.set(s.parent_step_id, arr);
+  }
+  for (const arr of childrenOf.values()) arr.sort((a, b) => a.sequence_index - b.sequence_index);
+
+  // constraint badges
   const badges = new Map<string, ConstraintBadge>();
   for (const c of constraints) {
     if (!c.target_id) continue;
@@ -114,42 +125,27 @@ export function buildAttachedGraph(input: AttachedInput): {
   }
   const badgeFor = (id: string) => (layers.constraints ? badges.get(id) : undefined);
 
-  const laneNodes: Node<OilNodeData>[] = []; // domain lanes (render behind)
+  const ownerDomainOf = (step: ProcessStep): string => {
+    const exec = stepPersonas.find(
+      (sp) => sp.step_id === step.id && sp.role_on_step === "executor",
+    );
+    return exec ? domainOf(personaById.get(exec.persona_id)) : UNOWNED;
+  };
+
+  const laneNodes: Node<OilNodeData>[] = [];
   const cellNodes: Node<OilNodeData>[] = [];
 
-  const sorted = [...steps].sort((a, b) => a.sequence_index - b.sequence_index);
-
-  interface StepMeta {
-    step: ProcessStep;
-    x: number;
-    ownerDomain: string;
-    ownerColor: DomainColor;
-    contentBottom: number;
-  }
-  const meta: StepMeta[] = [];
-
-  sorted.forEach((step, i) => {
-    const x = i * COL_SPACING;
-
-    const assigns = stepPersonas
-      .filter((sp) => sp.step_id === step.id)
-      .map((sp) => ({ sp, p: personaById.get(sp.persona_id) }))
-      .filter((a): a is { sp: StepPersona; p: Persona } => !!a.p)
-      .sort(
-        (a, b) =>
-          (ROLE_ORDER[a.sp.role_on_step] ?? 9) - (ROLE_ORDER[b.sp.role_on_step] ?? 9) ||
-          a.p.name.localeCompare(b.p.name),
-      );
-
-    // Owning domain = the executor's Function/Dept (fallback: Unowned).
-    const executor = assigns.find((a) => a.sp.role_on_step === "executor");
-    const ownerDomain = executor ? domainOf(executor.p) : UNOWNED;
-    const ownerColor = colorFor(ownerDomain);
+  // Recursively lay out a step (and, if expanded, its sub-steps) within a
+  // column starting at baseX, returning the bottom Y reached.
+  function layoutStep(step: ProcessStep, baseX: number, depth: number, startY: number): number {
+    const indent = Math.min(depth, MAX_INDENT_DEPTH) * INDENT;
+    const x = baseX + indent;
+    const kids = childrenOf.get(step.id) ?? [];
 
     cellNodes.push({
       id: `step:${step.id}`,
       type: "step",
-      position: { x, y: 0 },
+      position: { x, y: startY },
       zIndex: 2,
       data: {
         label: step.name,
@@ -158,19 +154,31 @@ export function buildAttachedGraph(input: AttachedInput): {
         dimmed: false,
         constraint: badgeFor(step.id),
         step,
-        subStepCount: childCount?.get(step.id) ?? 0,
+        subStepCount: kids.length,
+        isExpanded: expanded.has(step.id),
+        depth,
+        deptColor: colorFor(ownerDomainOf(step)).border,
       },
     });
 
-    let cursorY = STEP_H + SECTION_GAP;
+    let cursorY = startY + STEP_H + SECTION_GAP;
+    const cellX = x + CELL_X;
 
     if (layers.personas) {
+      const assigns = stepPersonas
+        .filter((sp) => sp.step_id === step.id)
+        .map((sp) => ({ sp, p: personaById.get(sp.persona_id) }))
+        .filter((a): a is { sp: StepPersona; p: Persona } => !!a.p)
+        .sort(
+          (a, b) =>
+            (ROLE_ORDER[a.sp.role_on_step] ?? 9) - (ROLE_ORDER[b.sp.role_on_step] ?? 9) ||
+            a.p.name.localeCompare(b.p.name),
+        );
       for (const { sp, p } of assigns) {
-        const own = colorFor(domainOf(p));
         cellNodes.push({
           id: `pcell:${step.id}:${p.id}`,
           type: "personaCell",
-          position: { x: x + CELL_X, y: cursorY },
+          position: { x: cellX, y: cursorY },
           zIndex: 2,
           data: {
             label: p.name,
@@ -180,7 +188,7 @@ export function buildAttachedGraph(input: AttachedInput): {
             constraint: badgeFor(p.id),
             persona: p,
             roleOnStep: sp.role_on_step,
-            deptColor: own.border,
+            deptColor: colorFor(domainOf(p)).border,
             isExecutor: sp.role_on_step === "executor",
           },
         });
@@ -201,7 +209,7 @@ export function buildAttachedGraph(input: AttachedInput): {
         cellNodes.push({
           id: `dcell:${d.id}`,
           type: "dataCell",
-          position: { x: x + CELL_X, y: cursorY },
+          position: { x: cellX, y: cursorY },
           zIndex: 2,
           data: { label: d.name, nodeKind: "data_element", entityId: d.id, dimmed: false, data: d },
         });
@@ -209,13 +217,38 @@ export function buildAttachedGraph(input: AttachedInput): {
       }
     }
 
-    const contentBottom = Math.max(STEP_H, cursorY - CELL_GAP);
-    meta.push({ step, x, ownerDomain, ownerColor, contentBottom });
+    // Expanded → nest sub-steps directly beneath, growing downward.
+    if (expanded.has(step.id) && kids.length) {
+      cursorY += 4;
+      for (const child of kids) {
+        cursorY = layoutStep(child, baseX, depth + 1, cursorY) + SUBSTEP_GAP;
+      }
+      cursorY -= SUBSTEP_GAP;
+    }
+
+    return cursorY;
+  }
+
+  const sortedTop = steps
+    .filter((s) => !s.parent_step_id)
+    .sort((a, b) => a.sequence_index - b.sequence_index);
+
+  interface Meta {
+    step: ProcessStep;
+    x: number;
+    ownerDomain: string;
+    ownerColor: DomainColor;
+    bottom: number;
+  }
+  const meta: Meta[] = [];
+  sortedTop.forEach((step, i) => {
+    const x = i * COL_SPACING;
+    const bottom = layoutStep(step, x, 0, 0);
+    const ownerDomain = ownerDomainOf(step);
+    meta.push({ step, x, ownerDomain, ownerColor: colorFor(ownerDomain), bottom });
   });
 
-  // Merge runs of consecutive same-domain steps into a single ownership lane
-  // spanning all their columns, with a header band above the steps for the
-  // domain label so it isn't hidden behind the step block.
+  // Merge consecutive same-domain top columns into one labeled lane.
   let r = 0;
   while (r < meta.length) {
     const dom = meta[r].ownerDomain;
@@ -225,7 +258,7 @@ export function buildAttachedGraph(input: AttachedInput): {
     const left = run[0].x - DOMAIN_PAD;
     const right = run[run.length - 1].x + STEP_W + DOMAIN_PAD;
     const top = -LANE_HEADER;
-    const maxBottom = Math.max(...run.map((m) => m.contentBottom));
+    const maxBottom = Math.max(...run.map((m) => m.bottom));
     const color = run[0].ownerColor;
     laneNodes.push({
       id: `lane:${run[0].step.id}`,
@@ -248,22 +281,21 @@ export function buildAttachedGraph(input: AttachedInput): {
     r = e + 1;
   }
 
-  // Step-to-step dependency edges (cells are attached spatially, no edges).
-  const stepIds = new Set(sorted.map((s) => s.id));
+  // Top-level sequence edges only (nesting conveys the sub-step sequence).
+  const topIds = new Set(sortedTop.map((s) => s.id));
   const outEdges: Edge[] = [];
-  for (const e of edges) {
-    if (e.from_type !== "step" || e.to_type !== "step") continue;
-    if (!stepIds.has(e.from_id) || !stepIds.has(e.to_id)) continue;
-    const style = EDGE_STYLE[e.edge_type] ?? EDGE_STYLE.sequence;
+  for (const ed of edges) {
+    if (ed.from_type !== "step" || ed.to_type !== "step") continue;
+    if (!topIds.has(ed.from_id) || !topIds.has(ed.to_id)) continue;
+    const style = EDGE_STYLE[ed.edge_type] ?? EDGE_STYLE.sequence;
     outEdges.push({
-      id: `fe-${e.id}`,
-      source: `step:${e.from_id}`,
-      target: `step:${e.to_id}`,
-      animated: e.edge_type === "sequence",
+      id: `fe-${ed.id}`,
+      source: `step:${ed.from_id}`,
+      target: `step:${ed.to_id}`,
+      animated: ed.edge_type === "sequence",
       style: { stroke: style.color, strokeWidth: 1.5, strokeDasharray: style.dash },
     });
   }
 
-  // Lanes first so they paint behind the cells.
   return { nodes: [...laneNodes, ...cellNodes], edges: outEdges };
 }

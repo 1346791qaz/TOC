@@ -1,4 +1,4 @@
-import { Layers, X } from "lucide-react";
+import { ChevronsUpDown, Plus, X } from "lucide-react";
 import type { EntityKey } from "@shared/schemas";
 import { useUpdate } from "@/lib/queries";
 import { dataElementFields, personaFields, processStepFields } from "@/lib/entityConfig";
@@ -24,11 +24,13 @@ function configFor(node: OilNodeData): { key: EntityKey; fields: FieldDef[]; rec
 export function DetailDrawer({
   node,
   onClose,
-  onDrill,
+  onAddSub,
+  onToggleExpand,
 }: {
   node: OilNodeData | null;
   onClose: () => void;
-  onDrill?: (stepId: string) => void;
+  onAddSub?: (stepId: string) => void;
+  onToggleExpand?: (stepId: string) => void;
 }) {
   const cfg = node ? configFor(node) : null;
   // Hook order is stable: the key only changes which entity we PATCH.
@@ -54,16 +56,18 @@ export function DetailDrawer({
           <X size={16} />
         </Button>
       </div>
-      {isStep && onDrill && (
-        <div className="border-b border-border p-3">
-          <Button
-            variant="outline"
-            className="w-full"
-            onClick={() => onDrill(node.entityId)}
-          >
-            <Layers size={14} /> Drill into sub-steps
-            {!!node.subStepCount && <span className="opacity-70">({node.subStepCount})</span>}
-          </Button>
+      {isStep && (
+        <div className="flex gap-2 border-b border-border p-3">
+          {onAddSub && (
+            <Button variant="outline" className="flex-1" onClick={() => onAddSub(node.entityId)}>
+              <Plus size={14} /> Add sub-step
+            </Button>
+          )}
+          {onToggleExpand && !!node.subStepCount && (
+            <Button variant="subtle" className="flex-1" onClick={() => onToggleExpand(node.entityId)}>
+              <ChevronsUpDown size={14} /> {node.isExpanded ? "Collapse" : "Show"} sub-steps ({node.subStepCount})
+            </Button>
+          )}
         </div>
       )}
       <div className="flex-1 overflow-y-auto p-3">

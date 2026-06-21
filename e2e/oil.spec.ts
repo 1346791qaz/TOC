@@ -339,18 +339,19 @@ test("14 · steps: add a sub-step and drill into the level", async ({ page }) =>
   await expect(page.getByRole("button", { name: /E2E Substep/ })).toBeHidden();
 });
 
-test("15 · canvas: drill into a step's sub-steps via double-click", async ({ page }) => {
+test("15 · canvas: expand a step's sub-steps inline", async ({ page }) => {
   await gotoApp(page);
   await nav(page, "OIL Graph");
   await expect(page.getByTestId("oilnode-step").first()).toBeVisible({ timeout: 15_000 });
 
-  // Inspection now has the sub-step created in test 14 — drill into it.
-  await page.getByTestId("oilnode-step").filter({ hasText: "Inspection" }).dblclick();
-  await expect(page.getByTestId("step-breadcrumb")).toContainText("Inspection");
+  // Inspection has the sub-step created in test 14 — expand it inline.
+  await page.getByTestId("oilnode-step").filter({ hasText: "Inspection" }).first().dblclick();
   await expect(page.getByTestId("oilnode-step").filter({ hasText: "E2E Substep" })).toBeVisible();
-  await page.screenshot({ path: "e2e/__screens__/15-drill.png", fullPage: true });
-
-  // Pop back to the top level via the breadcrumb root.
-  await page.getByTestId("step-breadcrumb").getByRole("button").first().click();
+  // The rest of the value stream stays visible (not replaced).
   await expect(page.getByTestId("oilnode-step").filter({ hasText: "Order Intake" })).toBeVisible();
+  await page.screenshot({ path: "e2e/__screens__/15-expand.png", fullPage: true });
+
+  // Collapse again.
+  await page.getByTestId("oilnode-step").filter({ hasText: "Inspection" }).first().dblclick();
+  await expect(page.getByTestId("oilnode-step").filter({ hasText: "E2E Substep" })).toBeHidden();
 });

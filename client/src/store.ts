@@ -40,9 +40,10 @@ interface UiState {
   layoutMode: LayoutMode;
   layers: { personas: boolean; data: boolean; constraints: boolean };
 
-  // Drill-down path into sub-steps (empty = value-stream top level). The last
-  // entry is the step whose sub-steps are currently shown.
+  // Drill-down path into sub-steps (used by the Steps list view).
   stepPath: { id: string; name: string }[];
+  // Canvas: which steps are expanded inline (sub-steps shown beneath them).
+  expandedSteps: string[];
 
   setEngagement: (id: string | null) => void;
   setValueStream: (id: string | null) => void;
@@ -53,6 +54,8 @@ interface UiState {
   toggleLayer: (l: keyof UiState["layers"]) => void;
   setStepPath: (path: { id: string; name: string }[]) => void;
   clearStepPath: () => void;
+  toggleExpand: (id: string) => void;
+  setExpanded: (ids: string[]) => void;
 }
 
 export const useUi = create<UiState>((set) => ({
@@ -64,10 +67,12 @@ export const useUi = create<UiState>((set) => ({
   layoutMode: "full",
   layers: { personas: true, data: true, constraints: true },
   stepPath: [],
+  expandedSteps: [],
 
   setEngagement: (id) =>
-    set({ engagementId: id, valueStreamId: null, selection: null, stepPath: [] }),
-  setValueStream: (id) => set({ valueStreamId: id, selection: null, stepPath: [] }),
+    set({ engagementId: id, valueStreamId: null, selection: null, stepPath: [], expandedSteps: [] }),
+  setValueStream: (id) =>
+    set({ valueStreamId: id, selection: null, stepPath: [], expandedSteps: [] }),
   setView: (view) => set({ view }),
   select: (selection) => set({ selection }),
   setCommandOpen: (commandOpen) => set({ commandOpen }),
@@ -76,4 +81,11 @@ export const useUi = create<UiState>((set) => ({
     set((s) => ({ layers: { ...s.layers, [l]: !s.layers[l] } })),
   setStepPath: (stepPath) => set({ stepPath }),
   clearStepPath: () => set({ stepPath: [] }),
+  toggleExpand: (id) =>
+    set((s) => ({
+      expandedSteps: s.expandedSteps.includes(id)
+        ? s.expandedSteps.filter((x) => x !== id)
+        : [...s.expandedSteps, id],
+    })),
+  setExpanded: (expandedSteps) => set({ expandedSteps }),
 }));
