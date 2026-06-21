@@ -144,26 +144,36 @@ export const stepPersona = makeEntity({
 export type StepPersona = z.infer<typeof stepPersona.record>;
 
 // ---------------------------------------------------------------------------
-// 4.8 data_elements
+// 4.8 data_elements — the field definition, shared across steps.
+// Step-specific attributes (binding_point, presence, etc.) live in the
+// step_data_elements junction table below.
 // ---------------------------------------------------------------------------
 export const dataElement = makeEntity({
-  step_id: z.string().uuid(),
+  value_stream_id: z.string().uuid(),
   name: z.string().min(1, "Name is required"),
   business_description: nullableText,
-  binding_point: bindingPointSchema.default("entry"),
   data_type: nullableText,
   length: nullableText,
   source_system: nullableText,
-  // Physical location of the data point: source table/view on entry, target on
-  // action/exit (per binding_point).
   table_or_view: nullableText,
   field_name: nullableText,
   example_value: nullableText,
+});
+export type DataElement = z.infer<typeof dataElement.record>;
+
+// ---------------------------------------------------------------------------
+// 4.8b step_data_elements — M:N junction linking a field definition to a
+// process step, carrying the step-specific context for that field.
+// ---------------------------------------------------------------------------
+export const stepDataElement = makeEntity({
+  step_id: z.string().uuid(),
+  data_element_id: z.string().uuid(),
+  binding_point: bindingPointSchema.default("entry"),
   presence: presenceSchema.default("present"),
   quality_notes: nullableText,
   is_key: z.boolean().default(false),
 });
-export type DataElement = z.infer<typeof dataElement.record>;
+export type StepDataElement = z.infer<typeof stepDataElement.record>;
 
 // ---------------------------------------------------------------------------
 // 4.9 constraints
@@ -209,6 +219,7 @@ export const ENTITIES = {
   process_steps: { table: "process_steps", schema: processStep },
   step_personas: { table: "step_personas", schema: stepPersona },
   data_elements: { table: "data_elements", schema: dataElement },
+  step_data_elements: { table: "step_data_elements", schema: stepDataElement },
   constraints: { table: "constraints", schema: constraint },
   flow_edges: { table: "flow_edges", schema: flowEdge },
 } as const;

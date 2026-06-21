@@ -5,7 +5,7 @@ import { getDb } from "../db/connection";
 // Columns stored as INTEGER 0/1 but exposed as booleans in the domain model.
 const BOOLEAN_COLUMNS: Record<string, string[]> = {
   metrics: ["is_leading"],
-  data_elements: ["is_key"],
+  step_data_elements: ["is_key"],
   constraints: ["is_system_constraint"],
 };
 

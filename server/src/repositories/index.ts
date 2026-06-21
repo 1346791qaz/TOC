@@ -9,6 +9,7 @@ import {
   type Metric,
   type Persona,
   type ProcessStep,
+  type StepDataElement,
   type StepPersona,
   type ValueStream,
 } from "@shared/schemas";
@@ -24,6 +25,7 @@ export interface RepoMap {
   process_steps: Repository<ProcessStep>;
   step_personas: Repository<StepPersona>;
   data_elements: Repository<DataElement>;
+  step_data_elements: Repository<StepDataElement>;
   constraints: Repository<Constraint>;
   flow_edges: Repository<FlowEdge>;
 }

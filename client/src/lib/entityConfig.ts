@@ -359,11 +359,10 @@ export const processStepFields: FieldDef[] = [
   { name: "data_etl_jobs", label: "Related ETL jobs", type: "textarea", full: true, placeholder: "e.g. nightly SAP→EDW extract (job ODS_LOAD_ORDERS)" },
 ];
 
+// Fields for a data_element definition (the shared field record).
 export const dataElementFields: FieldDef[] = [
-  { name: "step_id", label: "Process step", type: "select", optionsKey: "steps", required: true, full: true },
   { name: "name", label: "Data element (short name)", type: "text", required: true, full: true },
   { name: "business_description", label: "Business name / description", type: "textarea", full: true },
-  { name: "binding_point", label: "Binding point (entry = source · action/exit = target)", type: "select", options: BINDING_POINTS, full: true },
   {
     name: "source_system",
     label: "Source system",
@@ -383,6 +382,11 @@ export const dataElementFields: FieldDef[] = [
   },
   { name: "length", label: "Length", type: "text", placeholder: "e.g. 255, MAX, 14,2" },
   { name: "example_value", label: "Example value", type: "text" },
+];
+
+// Fields for a step_data_elements junction record (the step-specific usage).
+export const stepDataElementFields: FieldDef[] = [
+  { name: "binding_point", label: "Binding point (entry = source · action/exit = target)", type: "select", options: BINDING_POINTS, full: true },
   { name: "presence", label: "Presence", type: "select", options: PRESENCE },
   { name: "is_key", label: "Key data component", type: "boolean" },
   { name: "quality_notes", label: "Quality notes", type: "textarea", full: true },

@@ -1,17 +1,18 @@
 import { useMemo, useState } from "react";
 import { Plus } from "lucide-react";
-import type { DataElement, ProcessStep } from "@shared/schemas";
+import type { LinkedDataElement } from "@shared/gaps";
+import type { DataElement, ProcessStep, StepDataElement } from "@shared/schemas";
+import { linkDataElements } from "@shared/gaps";
 import { useList } from "@/lib/queries";
-import { dataElementFields } from "@/lib/entityConfig";
 import { presenceTone } from "@/lib/display";
 import { ViewShell, SearchBar, Table, Tr, Td, EmptyHint, type SortDir } from "@/components/ViewShell";
 import { Badge, Button } from "@/components/ui/primitives";
-import { EntityModalForm } from "@/components/EntityModalForm";
+import { DataElementModal } from "@/components/DataElementModal";
 import { RowActions } from "@/components/RowActions";
 
 const COLS = ["Step", "Binding", "Element", "Source / Target", "Table.Field", "Type", "Key", "Presence", ""] as const;
 
-function getVal(d: DataElement, stepName: string, col: string): string {
+function getVal(d: LinkedDataElement, stepName: string, col: string): string {
   switch (col) {
     case "Step": return stepName;
     case "Binding": return d.binding_point === "entry" ? "entry src" : `${d.binding_point} tgt`;
@@ -30,9 +31,13 @@ export function DataView({ vsId }: { vsId: string }) {
     where: { value_stream_id: vsId },
     orderBy: "sequence_index ASC",
   });
-  const allData = useList<DataElement>("data_elements");
+  const dataElementDefs = useList<DataElement>("data_elements", {
+    where: { value_stream_id: vsId },
+  });
+  const allSDEs = useList<StepDataElement>("step_data_elements");
+
   const [creating, setCreating] = useState(false);
-  const [editing, setEditing] = useState<DataElement | null>(null);
+  const [editing, setEditing] = useState<LinkedDataElement | null>(null);
   const [query, setQuery] = useState("");
   const [sortCol, setSortCol] = useState<string>("");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
@@ -42,16 +47,25 @@ export function DataView({ vsId }: { vsId: string }) {
     [steps.data],
   );
 
+  const stepIds = useMemo(() => new Set((steps.data ?? []).map((s) => s.id)), [steps.data]);
+
+  const stepOptions = useMemo(
+    () => (steps.data ?? []).map((s) => ({ value: s.id, label: s.name })),
+    [steps.data],
+  );
+
+  const linkedElements = useMemo(() => {
+    const vsSDEs = (allSDEs.data ?? []).filter((sde) => stepIds.has(sde.step_id));
+    return linkDataElements(dataElementDefs.data ?? [], vsSDEs);
+  }, [dataElementDefs.data, allSDEs.data, stepIds]);
+
   function handleSort(col: string) {
     if (sortCol === col) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     else { setSortCol(col); setSortDir("asc"); }
   }
 
-  const stepIds = new Set((steps.data ?? []).map((s) => s.id));
-  const stepOptions = (steps.data ?? []).map((s) => ({ value: s.id, label: s.name }));
-
   const rows = useMemo(() => {
-    let data = (allData.data ?? []).filter((d) => stepIds.has(d.step_id));
+    let data = linkedElements;
     if (query.trim()) {
       const q = query.trim().toLowerCase();
       data = data.filter((d) => {
@@ -72,12 +86,12 @@ export function DataView({ vsId }: { vsId: string }) {
     }
     return data;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allData.data, stepIds, stepById, query, sortCol, sortDir]);
+  }, [linkedElements, stepById, query, sortCol, sortDir]);
 
   return (
     <ViewShell
       title="Data Elements"
-      subtitle="Data bound to each step's entry / action / exit. Surfacing gaps is a first-class feature."
+      subtitle="Data bound to each step's entry / action / exit. One field definition can span multiple steps."
       actions={
         <>
           <SearchBar value={query} onChange={setQuery} placeholder="Search data…" />
@@ -125,7 +139,8 @@ export function DataView({ vsId }: { vsId: string }) {
                   <Badge tone={presenceTone[d.presence]}>{d.presence}</Badge>
                 </Td>
                 <Td>
-                  <RowActions entityKey="data_elements" id={d.id} onEdit={() => setEditing(d)} />
+                  {/* Soft-delete the step_data_elements junction row (not the definition) */}
+                  <RowActions entityKey="step_data_elements" id={d.id} onEdit={() => setEditing(d)} />
                 </Td>
               </Tr>
             );
@@ -133,23 +148,20 @@ export function DataView({ vsId }: { vsId: string }) {
         </Table>
       )}
 
-      <EntityModalForm
-        open={creating}
-        onClose={() => setCreating(false)}
-        entityKey="data_elements"
-        title="New Data Element"
-        fields={dataElementFields}
-        dynamicOptions={{ steps: stepOptions }}
-      />
+      {creating && (
+        <DataElementModal
+          open
+          onClose={() => setCreating(false)}
+          vsId={vsId}
+          stepOptions={stepOptions}
+        />
+      )}
       {editing && (
-        <EntityModalForm
+        <DataElementModal
           open
           onClose={() => setEditing(null)}
-          entityKey="data_elements"
-          title="Edit Data Element"
-          fields={dataElementFields}
+          vsId={vsId}
           initial={editing}
-          dynamicOptions={{ steps: stepOptions }}
         />
       )}
     </ViewShell>

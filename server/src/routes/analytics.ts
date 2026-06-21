@@ -5,9 +5,10 @@ import type {
   FlowEdge,
   Persona,
   ProcessStep,
+  StepDataElement,
   StepPersona,
 } from "@shared/schemas";
-import { buildDataGapReport } from "@shared/gaps";
+import { buildDataGapReport, linkDataElements } from "@shared/gaps";
 import { scoreConstraintCandidates } from "@shared/scoring";
 import { repos } from "../repositories";
 
@@ -19,8 +20,13 @@ function gather(valueStreamId: string) {
   }) as unknown as ProcessStep[];
   const stepIds = new Set(steps.map((s) => s.id));
 
-  const allDataElements = repos.data_elements.list() as unknown as DataElement[];
-  const dataElements = allDataElements.filter((d) => stepIds.has(d.step_id));
+  const dataElementDefs = repos.data_elements.list({
+    where: { value_stream_id: valueStreamId },
+  }) as unknown as DataElement[];
+
+  const allSDEs = repos.step_data_elements.list() as unknown as StepDataElement[];
+  const stepDataElements = allSDEs.filter((sde) => stepIds.has(sde.step_id));
+  const linkedElements = linkDataElements(dataElementDefs, stepDataElements);
 
   const allStepPersonas = repos.step_personas.list() as unknown as StepPersona[];
   const stepPersonas = allStepPersonas.filter((sp) => stepIds.has(sp.step_id));
@@ -35,20 +41,20 @@ function gather(valueStreamId: string) {
     where: { value_stream_id: valueStreamId },
   }) as unknown as FlowEdge[];
 
-  return { steps, dataElements, stepPersonas, personas, constraints, edges };
+  return { steps, linkedElements, stepPersonas, personas, constraints, edges };
 }
 
 export function analyticsRouter(): Router {
   const router = Router();
 
   router.get("/gaps/:valueStreamId", (req, res) => {
-    const { steps, dataElements } = gather(req.params.valueStreamId);
-    res.json(buildDataGapReport(steps, dataElements));
+    const { steps, linkedElements } = gather(req.params.valueStreamId);
+    res.json(buildDataGapReport(steps, linkedElements));
   });
 
   router.get("/candidates/:valueStreamId", (req, res) => {
-    const data = gather(req.params.valueStreamId);
-    res.json(scoreConstraintCandidates(data));
+    const { steps, linkedElements, stepPersonas, personas, constraints, edges } = gather(req.params.valueStreamId);
+    res.json(scoreConstraintCandidates({ steps, dataElements: linkedElements, stepPersonas, personas, constraints, edges }));
   });
 
   // Soft governance: how many constraints are active (beyond `identified`) in

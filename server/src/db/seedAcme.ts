@@ -213,16 +213,21 @@ export function seedAcme(): { seeded: boolean; subStepsAdded: number } {
     { step: 11, name: "Tracking number", bind: "exit", presence: "present", type: "code", src: "ERP", key: true },
   ];
   for (const d of data) {
-    repos.data_elements.create({
-      step_id: S(d.step),
+    const def = repos.data_elements.create({
+      value_stream_id: V,
       name: d.name,
       business_description: d.desc ?? null,
-      binding_point: d.bind,
       data_type: d.type ?? null,
       source_system: d.src ?? null,
       table_or_view: d.tbl ?? null,
       field_name: d.fld ?? null,
       example_value: d.ex ?? null,
+      length: null,
+    });
+    repos.step_data_elements.create({
+      step_id: S(d.step),
+      data_element_id: def.id,
+      binding_point: d.bind,
       presence: d.presence,
       quality_notes: d.notes ?? null,
       is_key: d.key ?? false,
@@ -373,8 +378,10 @@ export function seedAcme(): { seeded: boolean; subStepsAdded: number } {
   }
   repos.step_personas.create({ step_id: FS(5), persona_id: P(8), role_on_step: "consulted" });
   // A couple of data gaps inside the constraint.
-  repos.data_elements.create({ step_id: FS(3), name: "Torque values", business_description: "Measured fastener torque per joint", binding_point: "action", data_type: "N·m", source_system: "None (driver not networked)", table_or_view: "(none — gap)", field_name: "—", example_value: "2.41, 2.38, 2.45", presence: "missing", quality_notes: "Not captured per unit.", is_key: true });
-  repos.data_elements.create({ step_id: FS(5), name: "As-built record", business_description: "Serialized as-built configuration + sign-off", binding_point: "exit", data_type: "record", source_system: "None", table_or_view: "(none — gap)", field_name: "—", example_value: "SN 22918 → builder JD", presence: "missing", quality_notes: "Verbal sign-off only.", is_key: true });
+  const _tv = repos.data_elements.create({ value_stream_id: V, name: "Torque values", business_description: "Measured fastener torque per joint", data_type: "N·m", source_system: "None (driver not networked)", table_or_view: "(none — gap)", field_name: "—", example_value: "2.41, 2.38, 2.45", length: null });
+  repos.step_data_elements.create({ step_id: FS(3), data_element_id: _tv.id, binding_point: "action", presence: "missing", quality_notes: "Not captured per unit.", is_key: true });
+  const _abr = repos.data_elements.create({ value_stream_id: V, name: "As-built record", business_description: "Serialized as-built configuration + sign-off", data_type: "record", source_system: "None", table_or_view: "(none — gap)", field_name: "—", example_value: "SN 22918 → builder JD", length: null });
+  repos.step_data_elements.create({ step_id: FS(5), data_element_id: _abr.id, binding_point: "exit", presence: "missing", quality_notes: "Verbal sign-off only.", is_key: true });
   // Sequence spine among the sub-steps (drives the drilled-in canvas).
   for (let i = 1; i < subSteps.length; i++) {
     repos.flow_edges.create({
@@ -495,16 +502,21 @@ export function seedAcmeSubSteps(): number {
       added++;
       repos.step_personas.create({ step_id: SUB(def.block, s.k), persona_id: P(def.executor), role_on_step: "executor" });
       for (const d of s.data ?? []) {
-        repos.data_elements.create({
-          step_id: SUB(def.block, s.k),
+        const def2 = repos.data_elements.create({
+          value_stream_id: V,
           name: d.name,
           business_description: d.desc ?? null,
-          binding_point: d.bind,
           data_type: d.type ?? null,
           source_system: d.src ?? null,
           table_or_view: d.tbl ?? null,
           field_name: d.fld ?? null,
           example_value: d.ex ?? null,
+          length: null,
+        });
+        repos.step_data_elements.create({
+          step_id: SUB(def.block, s.k),
+          data_element_id: def2.id,
+          binding_point: d.bind,
           presence: d.presence,
           quality_notes: d.notes ?? null,
           is_key: d.key ?? false,
@@ -592,16 +604,21 @@ export function seedAcmeGrandSubSteps(): number {
       added++;
       repos.step_personas.create({ step_id: gsubId(def.block, s.k), persona_id: P(def.executor), role_on_step: "executor" });
       for (const d of s.data ?? []) {
-        repos.data_elements.create({
-          step_id: gsubId(def.block, s.k),
+        const gdef = repos.data_elements.create({
+          value_stream_id: V,
           name: d.name,
           business_description: d.desc ?? null,
-          binding_point: d.bind,
           data_type: d.type ?? null,
           source_system: d.src ?? null,
           table_or_view: d.tbl ?? null,
           field_name: d.fld ?? null,
           example_value: d.ex ?? null,
+          length: null,
+        });
+        repos.step_data_elements.create({
+          step_id: gsubId(def.block, s.k),
+          data_element_id: gdef.id,
+          binding_point: d.bind,
           presence: d.presence,
           quality_notes: d.notes ?? null,
           is_key: d.key ?? false,

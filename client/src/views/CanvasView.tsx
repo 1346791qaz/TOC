@@ -21,9 +21,11 @@ import type {
   FlowEdge,
   Persona,
   ProcessStep,
+  StepDataElement,
   StepPersona,
   ValueStream,
 } from "@shared/schemas";
+import { linkDataElements } from "@shared/gaps";
 import { useCreate, useList, useSoftDelete } from "@/lib/queries";
 import { useUi, type LayoutMode } from "@/store";
 import { cn } from "@/lib/utils";
@@ -54,7 +56,8 @@ function CanvasInner({ vsId }: { vsId: string }) {
     orderBy: "sequence_index ASC",
   });
   const personas = useList<Persona>("personas", { where: { value_stream_id: vsId } });
-  const allData = useList<DataElement>("data_elements");
+  const allDataDefs = useList<DataElement>("data_elements", { where: { value_stream_id: vsId } });
+  const allSDEs = useList<StepDataElement>("step_data_elements");
   const allStepPersonas = useList<StepPersona>("step_personas");
   const constraints = useList<Constraint>("constraints", { where: { value_stream_id: vsId } });
   const edges = useList<FlowEdge>("flow_edges", { where: { value_stream_id: vsId } });
@@ -90,11 +93,12 @@ function CanvasInner({ vsId }: { vsId: string }) {
   };
 
   const ready =
-    steps.data && personas.data && allData.data && allStepPersonas.data && constraints.data && edges.data;
+    steps.data && personas.data && allDataDefs.data && allSDEs.data && allStepPersonas.data && constraints.data && edges.data;
 
   useEffect(() => {
     if (!ready) return;
-    const dataElements = (allData.data ?? []).filter((d) => allStepIds.has(d.step_id));
+    const vsSDEs = (allSDEs.data ?? []).filter((sde) => allStepIds.has(sde.step_id));
+    const dataElements = linkDataElements(allDataDefs.data ?? [], vsSDEs);
     const stepPersonas = (allStepPersonas.data ?? []).filter((sp) => allStepIds.has(sp.step_id));
     const refit = () => setTimeout(() => fitView({ padding: 0.2, duration: 300 }), 50);
 
@@ -138,7 +142,7 @@ function CanvasInner({ vsId }: { vsId: string }) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, allSteps, personas.data, allData.data, allStepPersonas.data, constraints.data, edges.data, layoutMode, layers, expandedSet]);
+  }, [ready, allSteps, personas.data, allDataDefs.data, allSDEs.data, allStepPersonas.data, constraints.data, edges.data, layoutMode, layers, expandedSet]);
 
   return (
     <div className="flex h-full">

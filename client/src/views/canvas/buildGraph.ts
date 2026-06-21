@@ -1,7 +1,7 @@
 import type { Edge, Node } from "@xyflow/react";
+import type { LinkedDataElement } from "@shared/gaps";
 import type {
   Constraint,
-  DataElement,
   FlowEdge,
   Persona,
   ProcessStep,
@@ -25,7 +25,7 @@ export interface OilNodeData extends Record<string, unknown> {
   constraint?: ConstraintBadge;
   step?: ProcessStep;
   persona?: Persona;
-  data?: DataElement;
+  data?: LinkedDataElement;
   // Attached-cell layout extras
   roleOnStep?: string;
   deptColor?: string;
@@ -49,7 +49,7 @@ const nid = (t: FlowNodeType, id: string) => `${t}:${id}`;
 export interface GraphInput {
   steps: ProcessStep[];
   personas: Persona[];
-  dataElements: DataElement[];
+  dataElements: LinkedDataElement[];
   stepPersonas: StepPersona[];
   constraints: Constraint[];
   edges: FlowEdge[];

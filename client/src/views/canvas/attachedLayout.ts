@@ -1,7 +1,7 @@
 import type { Edge, Node } from "@xyflow/react";
+import type { LinkedDataElement } from "@shared/gaps";
 import type {
   Constraint,
-  DataElement,
   FlowEdge,
   Persona,
   ProcessStep,
@@ -74,7 +74,7 @@ const GRAY: DomainColor = {
 export interface AttachedInput {
   steps: ProcessStep[];
   personas: Persona[];
-  dataElements: DataElement[];
+  dataElements: LinkedDataElement[];
   stepPersonas: StepPersona[];
   constraints: Constraint[];
   edges: FlowEdge[];

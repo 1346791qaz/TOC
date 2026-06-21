@@ -158,7 +158,7 @@ export function ConstraintForm({
 }) {
   const steps = useList<ProcessStep>("process_steps", { where: { value_stream_id: vsId } });
   const personas = useList<Persona>("personas", { where: { value_stream_id: vsId } });
-  const dataEls = useList<DataElement>("data_elements");
+  const dataEls = useList<DataElement>("data_elements", { where: { value_stream_id: vsId } });
   const edges = useList<FlowEdge>("flow_edges", { where: { value_stream_id: vsId } });
   const create = useCreate("constraints");
   const update = useUpdate("constraints");
@@ -178,7 +178,6 @@ export function ConstraintForm({
   const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) =>
     setForm((s) => ({ ...s, [k]: v }));
 
-  const stepIds = new Set((steps.data ?? []).map((s) => s.id));
   const targetOptions = useMemo(() => {
     switch (form.target_type as ConstraintTargetType) {
       case "step":
@@ -187,7 +186,6 @@ export function ConstraintForm({
         return (personas.data ?? []).map((p) => ({ value: p.id, label: p.name }));
       case "data_element":
         return (dataEls.data ?? [])
-          .filter((d) => stepIds.has(d.step_id))
           .map((d) => ({ value: d.id, label: d.name }));
       case "edge":
         return (edges.data ?? []).map((e) => ({

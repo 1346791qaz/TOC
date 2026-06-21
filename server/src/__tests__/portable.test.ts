@@ -18,6 +18,7 @@ describe("engagement export / import round-trip", () => {
     expect(bundle.data.engagements).toHaveLength(1);
     expect(bundle.data.process_steps).toHaveLength(6);
     expect(bundle.data.data_elements.length).toBeGreaterThan(0);
+    expect(bundle.data.step_data_elements.length).toBeGreaterThan(0);
     expect(bundle.data.constraints.length).toBeGreaterThan(0);
   });
 
