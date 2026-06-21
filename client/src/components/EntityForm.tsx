@@ -47,6 +47,7 @@ export function EntityForm({
   const [values, setValues] = useState<Values>(() => {
     const v: Values = {};
     for (const f of fields) {
+      if (f.type === "section") continue;
       const init = initial?.[f.name];
       if (f.type === "boolean") v[f.name] = Boolean(init);
       // Selects default to their first option so the state matches what the
@@ -71,7 +72,10 @@ export function EntityForm({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const out: Values = {};
-    for (const f of fields) out[f.name] = coerce(f, values[f.name] as string | boolean);
+    for (const f of fields) {
+      if (f.type === "section") continue;
+      out[f.name] = coerce(f, values[f.name] as string | boolean);
+    }
     onSubmit(out);
   };
 
@@ -79,6 +83,16 @@ export function EntityForm({
     <form id={formId} onSubmit={handleSubmit} className="grid grid-cols-2 gap-3">
       {fields.map((f) => {
         const span = f.full ? "col-span-2" : "col-span-1";
+        if (f.type === "section") {
+          return (
+            <p
+              key={f.name}
+              className="col-span-2 border-t border-border pt-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"
+            >
+              {f.label}
+            </p>
+          );
+        }
         if (f.type === "boolean") {
           return (
             <label

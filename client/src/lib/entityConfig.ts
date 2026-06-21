@@ -6,7 +6,7 @@ import {
   SCOPE_LEVELS,
 } from "@shared/enums";
 
-export type FieldType = "text" | "textarea" | "number" | "boolean" | "select" | "combobox";
+export type FieldType = "text" | "textarea" | "number" | "boolean" | "select" | "combobox" | "section";
 
 export interface FieldDef {
   name: string;

@@ -112,6 +112,7 @@ export function StepsView({ vsId }: { vsId: string }) {
               vsId={vsId}
               allSteps={allSteps}
               linkedElements={linkedElements}
+              availableDefs={dataElementDefs.data ?? []}
               onEdit={() => setEditing(selected)}
               onDrill={() => drillInto(selected.id)}
               onDrillChild={(childId) => drillInto(childId)}
@@ -166,6 +167,7 @@ function StepDetail({
   vsId,
   allSteps,
   linkedElements,
+  availableDefs,
   onEdit,
   onDrill,
   onDrillChild,
@@ -175,6 +177,7 @@ function StepDetail({
   vsId: string;
   allSteps: ProcessStep[];
   linkedElements: LinkedDataElement[];
+  availableDefs: DataElement[];
   onEdit: () => void;
   onDrill: () => void;
   onDrillChild: (childId: string) => void;
@@ -216,7 +219,7 @@ function StepDetail({
 
       <DataLandscape step={step} />
       <StepPersonas step={step} vsId={vsId} />
-      <StepData step={step} vsId={vsId} linkedElements={linkedElements.filter((d) => d.step_id === step.id)} />
+      <StepData step={step} vsId={vsId} linkedElements={linkedElements.filter((d) => d.step_id === step.id)} availableDefs={availableDefs} />
       <StepSubSteps step={step} vsId={vsId} allSteps={allSteps} onDrill={onDrill} onDrillChild={onDrillChild} />
     </div>
   );
@@ -394,14 +397,21 @@ function StepData({
   step,
   vsId,
   linkedElements,
+  availableDefs,
 }: {
   step: ProcessStep;
   vsId: string;
   linkedElements: LinkedDataElement[];
+  availableDefs: DataElement[];
 }) {
   const del = useSoftDelete("step_data_elements");
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<LinkedDataElement | null>(null);
+
+  const alreadyBoundIds = useMemo(
+    () => new Set(linkedElements.map((d) => d.data_element_id)),
+    [linkedElements],
+  );
 
   return (
     <Card>
@@ -441,6 +451,8 @@ function StepData({
           onClose={() => setCreating(false)}
           vsId={vsId}
           stepId={step.id}
+          availableDefs={availableDefs}
+          alreadyBoundIds={alreadyBoundIds}
         />
       )}
       {editing && (
@@ -449,6 +461,7 @@ function StepData({
           onClose={() => setEditing(null)}
           vsId={vsId}
           stepId={step.id}
+          availableDefs={availableDefs}
           initial={editing}
         />
       )}

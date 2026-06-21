@@ -154,6 +154,7 @@ export function DataView({ vsId }: { vsId: string }) {
           onClose={() => setCreating(false)}
           vsId={vsId}
           stepOptions={stepOptions}
+          availableDefs={dataElementDefs.data ?? []}
         />
       )}
       {editing && (
@@ -161,6 +162,7 @@ export function DataView({ vsId }: { vsId: string }) {
           open
           onClose={() => setEditing(null)}
           vsId={vsId}
+          availableDefs={dataElementDefs.data ?? []}
           initial={editing}
         />
       )}
