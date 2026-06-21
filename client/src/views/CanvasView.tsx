@@ -13,7 +13,7 @@ import {
   type Edge,
   type Node,
 } from "@xyflow/react";
-import { ChevronsDownUp, ChevronsUpDown, Plus } from "lucide-react";
+import { ChevronsDownUp, ChevronsUpDown, Info, Plus } from "lucide-react";
 import { EDGE_TYPES, type EdgeType, type FlowNodeType } from "@shared/enums";
 import type {
   Constraint,
@@ -26,7 +26,7 @@ import type {
   ValueStream,
 } from "@shared/schemas";
 import { linkDataElements } from "@shared/gaps";
-import { useCreate, useList, useSoftDelete } from "@/lib/queries";
+import { useCreate, useList, useSoftDelete, useUpdate } from "@/lib/queries";
 import { useUi, type LayoutMode } from "@/store";
 import { cn } from "@/lib/utils";
 import { titleCase } from "@/lib/display";
@@ -38,6 +38,13 @@ import { buildAttachedGraph } from "./canvas/attachedLayout";
 import { layoutElk } from "./canvas/layout";
 import { nodeTypes } from "./canvas/nodes";
 import { DetailDrawer } from "./canvas/DetailDrawer";
+
+const EDGE_TYPE_INFO = [
+  { type: "sequence",    color: "hsl(215 20% 45%)", label: "Sequence",    desc: "Steps must happen in this order; A flows directly into B." },
+  { type: "dependency",  color: "hsl(38 92% 55%)",  label: "Dependency",  desc: "B cannot start until A delivers something (data, approval, artifact)." },
+  { type: "data_flow",   color: "hsl(190 70% 50%)", label: "Data Flow",   desc: "A piece of information or data artifact moves from A to B." },
+  { type: "handoff",     color: "hsl(270 55% 62%)", label: "Handoff",     desc: "Work is physically passed from one team or person to another." },
+] as const;
 
 const LAYOUT_MODES: { value: LayoutMode; label: string }[] = [
   { value: "spine", label: "Process spine" },
@@ -69,6 +76,14 @@ function CanvasInner({ vsId }: { vsId: string }) {
   const [addParent, setAddParent] = useState<string | null | undefined>(undefined); // undefined = closed
   const createEdge = useCreate<FlowEdge>("flow_edges");
   const deleteEdge = useSoftDelete("flow_edges");
+  const updateEdge = useUpdate<FlowEdge>("flow_edges");
+  const [edgeMenu, setEdgeMenu] = useState<{
+    id: string;
+    edgeType: EdgeType;
+    x: number;
+    y: number;
+  } | null>(null);
+  const [showEdgeInfo, setShowEdgeInfo] = useState(false);
 
   const allSteps = useMemo(() => steps.data ?? [], [steps.data]);
   const allStepIds = useMemo(() => new Set(allSteps.map((s) => s.id)), [allSteps]);
@@ -90,6 +105,7 @@ function CanvasInner({ vsId }: { vsId: string }) {
   };
   const onEdgesDelete = (deleted: Edge[]) => {
     for (const e of deleted) if (e.id.startsWith("fe-")) deleteEdge.mutate(e.id.slice(3));
+    setEdgeMenu(null);
   };
 
   const ready =
@@ -195,12 +211,12 @@ function CanvasInner({ vsId }: { vsId: string }) {
                 ))}
               </div>
             )}
-            <div className="flex items-center gap-1.5 rounded-md border border-border bg-surface/90 p-1 text-[11px] text-muted-foreground backdrop-blur">
-              <span className="pl-1">Drag to link · new edge:</span>
+            <div className="relative flex items-center gap-1.5 rounded-md border border-border bg-surface/90 p-1 text-[11px] text-muted-foreground backdrop-blur">
+              <span className="shrink-0 pl-1">Drag to link · new edge:</span>
               <Select
                 value={newEdgeType}
                 onChange={(e) => setNewEdgeType(e.target.value as EdgeType)}
-                className="h-7 w-32"
+                className="h-7 w-36"
               >
                 {EDGE_TYPES.map((t) => (
                   <option key={t} value={t}>
@@ -208,6 +224,26 @@ function CanvasInner({ vsId }: { vsId: string }) {
                   </option>
                 ))}
               </Select>
+              <button
+                onClick={(e) => { e.stopPropagation(); setShowEdgeInfo((v) => !v); }}
+                className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full hover:bg-muted"
+                title="Edge type guide"
+              >
+                <Info size={12} />
+              </button>
+              {showEdgeInfo && (
+                <div className="absolute left-0 top-full z-50 mt-1 w-72 rounded-md border border-border bg-surface p-3 shadow-lg leading-relaxed">
+                  <p className="mb-2 font-semibold text-foreground">Edge types</p>
+                  <div className="space-y-2 text-muted-foreground">
+                    {EDGE_TYPE_INFO.map(({ type, color, label, desc }) => (
+                      <div key={type} className="flex gap-2">
+                        <span className="mt-1 h-2 w-2 shrink-0 rounded-full" style={{ background: color }} />
+                        <span><span className="font-medium text-foreground">{label}</span> — {desc}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
             {layoutMode === "full" && (
               <div className="rounded-md border border-border bg-surface/90 px-2 py-1 text-[11px] text-muted-foreground backdrop-blur">
@@ -223,8 +259,16 @@ function CanvasInner({ vsId }: { vsId: string }) {
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
             onEdgesDelete={onEdgesDelete}
+            onEdgeClick={(evt, edge) => {
+              if (!edge.id.startsWith("fe-")) return;
+              const feId = edge.id.slice(3);
+              const fe = edges.data?.find((e) => e.id === feId);
+              if (!fe) return;
+              setEdgeMenu({ id: feId, edgeType: fe.edge_type, x: evt.clientX, y: evt.clientY });
+            }}
             nodeTypes={nodeTypes}
             onNodeClick={(_, n) => {
+              setEdgeMenu(null);
               if (n.type === "deptBg") return;
               setSelected(n.data as OilNodeData);
             }}
@@ -233,7 +277,7 @@ function CanvasInner({ vsId }: { vsId: string }) {
               if (data.nodeKind === "step" && data.entityId && data.subStepCount)
                 toggleExpand(data.entityId);
             }}
-            onPaneClick={() => setSelected(null)}
+            onPaneClick={() => { setSelected(null); setEdgeMenu(null); setShowEdgeInfo(false); }}
             fitView
             zoomOnDoubleClick={false}
             minZoom={0.15}
@@ -276,6 +320,41 @@ function CanvasInner({ vsId }: { vsId: string }) {
         fields={processStepFields}
         extra={{ value_stream_id: vsId, parent_step_id: addParent ?? null }}
       />
+
+      {edgeMenu && (
+        <div
+          className="fixed z-50 min-w-[168px] rounded-md border border-border bg-surface p-3 shadow-lg"
+          style={{ left: edgeMenu.x + 8, top: edgeMenu.y - 10 }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <p className="mb-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+            Flow edge
+          </p>
+          <div className="space-y-2">
+            <Select
+              value={edgeMenu.edgeType}
+              onChange={(e) => {
+                const newType = e.target.value as EdgeType;
+                updateEdge.mutate({ id: edgeMenu.id, data: { edge_type: newType } });
+                setEdgeMenu((m) => m && { ...m, edgeType: newType });
+              }}
+              className="h-7 text-xs"
+            >
+              {EDGE_TYPES.map((t) => (
+                <option key={t} value={t}>{titleCase(t)}</option>
+              ))}
+            </Select>
+            <Button
+              size="sm"
+              variant="danger"
+              className="w-full"
+              onClick={() => { deleteEdge.mutate(edgeMenu.id); setEdgeMenu(null); }}
+            >
+              Remove edge
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
