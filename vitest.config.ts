@@ -11,5 +11,6 @@ export default defineConfig({
   test: {
     include: ["server/**/*.test.ts", "shared/**/*.test.ts"],
     environment: "node",
+    reporters: ["dot"],
   },
 });
