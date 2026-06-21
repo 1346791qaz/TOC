@@ -1,4 +1,4 @@
-import { Handle, Position, type NodeProps } from "@xyflow/react";
+import { Handle, Position, type NodeProps, type EdgeProps } from "@xyflow/react";
 import { AlertTriangle, ChevronDown, ChevronRight, Database, User, Workflow } from "lucide-react";
 import { fmtNum } from "@/lib/utils";
 import { presenceTone } from "@/lib/display";
@@ -276,3 +276,24 @@ export const nodeTypes = {
   dataCell: DataCell,
   deptBg: DeptBackground,
 };
+
+// Custom edge that separates parallel edges (same source+target) by arcing them
+// through different vertical positions. Single edges render as a standard bezier.
+export function ParallelBezierEdge({
+  sourceX, sourceY, targetX, targetY, style, markerEnd, data,
+}: EdgeProps) {
+  const idx = (data?.parallelIndex as number) ?? 0;
+  const total = (data?.parallelTotal as number) ?? 1;
+  const vOffset = (idx - (total - 1) / 2) * 26;
+  const hDist = Math.abs(targetX - sourceX) * 0.3;
+  const d = `M ${sourceX},${sourceY} C ${sourceX + hDist},${sourceY + vOffset} ${targetX - hDist},${targetY + vOffset} ${targetX},${targetY}`;
+  return (
+    <>
+      {/* Wide transparent stroke makes the thin line much easier to click */}
+      <path d={d} fill="none" stroke="transparent" strokeWidth={18} />
+      <path d={d} fill="none" className="react-flow__edge-path" style={style} markerEnd={markerEnd} />
+    </>
+  );
+}
+
+export const edgeTypes = { parallel: ParallelBezierEdge };

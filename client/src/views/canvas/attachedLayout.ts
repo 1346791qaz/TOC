@@ -264,7 +264,11 @@ export function buildAttachedGraph(input: AttachedInput): {
       id: `lane:${run[0].step.id}`,
       type: "deptBg",
       position: { x: left, y: top },
-      style: { width: Math.max(STEP_W + DOMAIN_PAD * 2, right - left), height: maxBottom + DOMAIN_PAD - top },
+      style: {
+        width: Math.max(STEP_W + DOMAIN_PAD * 2, right - left),
+        height: maxBottom + DOMAIN_PAD - top,
+        pointerEvents: "none",   // let clicks pass through to edges beneath
+      },
       selectable: false,
       draggable: false,
       zIndex: 0,
@@ -296,6 +300,21 @@ export function buildAttachedGraph(input: AttachedInput): {
       animated: ed.edge_type === "sequence",
       style: { stroke: style.color, strokeWidth: 1.5, strokeDasharray: style.dash },
     });
+  }
+
+  // Detect parallel edges and assign per-pair indices for arc separation.
+  const pairCount = new Map<string, number>();
+  const pairIdx = new Map<string, number>();
+  for (const e of outEdges) pairCount.set(`${e.source}|${e.target}`, (pairCount.get(`${e.source}|${e.target}`) ?? 0) + 1);
+  for (const e of outEdges) {
+    const key = `${e.source}|${e.target}`;
+    const total = pairCount.get(key) ?? 1;
+    if (total > 1) {
+      const idx = pairIdx.get(key) ?? 0;
+      pairIdx.set(key, idx + 1);
+      e.type = "parallel";
+      e.data = { parallelIndex: idx, parallelTotal: total };
+    }
   }
 
   return { nodes: [...laneNodes, ...cellNodes], edges: outEdges };

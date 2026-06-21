@@ -36,7 +36,7 @@ import { EntityModalForm } from "@/components/EntityModalForm";
 import { buildGraph, type OilNodeData } from "./canvas/buildGraph";
 import { buildAttachedGraph } from "./canvas/attachedLayout";
 import { layoutElk } from "./canvas/layout";
-import { nodeTypes } from "./canvas/nodes";
+import { nodeTypes, edgeTypes } from "./canvas/nodes";
 import { DetailDrawer } from "./canvas/DetailDrawer";
 
 const EDGE_TYPE_INFO = [
@@ -216,7 +216,7 @@ function CanvasInner({ vsId }: { vsId: string }) {
               <Select
                 value={newEdgeType}
                 onChange={(e) => setNewEdgeType(e.target.value as EdgeType)}
-                className="h-7 w-36"
+                className="h-7 w-44"
               >
                 {EDGE_TYPES.map((t) => (
                   <option key={t} value={t}>
@@ -265,8 +265,11 @@ function CanvasInner({ vsId }: { vsId: string }) {
               const fe = edges.data?.find((e) => e.id === feId);
               if (!fe) return;
               setEdgeMenu({ id: feId, edgeType: fe.edge_type, x: evt.clientX, y: evt.clientY });
+              // Highlight the two connected nodes so the user knows which steps this edge links.
+              setNodes((nds) => nds.map((n) => ({ ...n, selected: n.id === edge.source || n.id === edge.target })));
             }}
             nodeTypes={nodeTypes}
+            edgeTypes={edgeTypes}
             onNodeClick={(_, n) => {
               setEdgeMenu(null);
               if (n.type === "deptBg") return;
@@ -323,7 +326,7 @@ function CanvasInner({ vsId }: { vsId: string }) {
 
       {edgeMenu && (
         <div
-          className="fixed z-50 min-w-[168px] rounded-md border border-border bg-surface p-3 shadow-lg"
+          className="fixed z-50 min-w-[220px] rounded-md border border-border bg-surface p-3 shadow-lg"
           style={{ left: edgeMenu.x + 8, top: edgeMenu.y - 10 }}
           onClick={(e) => e.stopPropagation()}
         >
@@ -338,7 +341,7 @@ function CanvasInner({ vsId }: { vsId: string }) {
                 updateEdge.mutate({ id: edgeMenu.id, data: { edge_type: newType } });
                 setEdgeMenu((m) => m && { ...m, edgeType: newType });
               }}
-              className="h-7 text-xs"
+              className="h-7"
             >
               {EDGE_TYPES.map((t) => (
                 <option key={t} value={t}>{titleCase(t)}</option>
@@ -348,7 +351,11 @@ function CanvasInner({ vsId }: { vsId: string }) {
               size="sm"
               variant="danger"
               className="w-full"
-              onClick={() => { deleteEdge.mutate(edgeMenu.id); setEdgeMenu(null); }}
+              onClick={() => {
+                deleteEdge.mutate(edgeMenu.id);
+                setEdgeMenu(null);
+                setNodes((nds) => nds.map((n) => ({ ...n, selected: false })));
+              }}
             >
               Remove edge
             </Button>

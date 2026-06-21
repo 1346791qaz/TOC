@@ -214,6 +214,22 @@ export function buildGraph(input: GraphInput): { nodes: Node<OilNodeData>[]; edg
     }
   }
 
+  // Detect parallel edges (multiple edges between same source+target) and assign
+  // an index so the custom edge renderer can arc them through different Y positions.
+  const pairCount = new Map<string, number>();
+  const pairIdx = new Map<string, number>();
+  for (const e of outEdges) pairCount.set(`${e.source}|${e.target}`, (pairCount.get(`${e.source}|${e.target}`) ?? 0) + 1);
+  for (const e of outEdges) {
+    const key = `${e.source}|${e.target}`;
+    const total = pairCount.get(key) ?? 1;
+    if (total > 1) {
+      const idx = pairIdx.get(key) ?? 0;
+      pairIdx.set(key, idx + 1);
+      e.type = "parallel";
+      e.data = { parallelIndex: idx, parallelTotal: total };
+    }
+  }
+
   return { nodes, edges: outEdges };
 }
 
