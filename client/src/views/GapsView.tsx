@@ -34,7 +34,7 @@ export function GapsView({ vsId }: { vsId: string }) {
   return (
     <ViewShell
       title="Data Gap Report"
-      subtitle="Where the Operational Intelligence Layer is blind — missing / partial and key data, grouped by step."
+      subtitle="Where the Value Stream Model is blind — missing / partial and key data, grouped by step."
     >
       {!report ? (
         <EmptyHint>Loading…</EmptyHint>

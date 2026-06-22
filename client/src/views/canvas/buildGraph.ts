@@ -36,7 +36,7 @@ export interface OilNodeData extends Record<string, unknown> {
   subStepCount?: number;
   isExpanded?: boolean;
   depth?: number;
-  // Lane membership: which domain frame owns this node (for group drag in Full OIL mode).
+  // Lane membership: which domain frame owns this node (for group drag in Full Model mode).
   laneId?: string;
 }
 

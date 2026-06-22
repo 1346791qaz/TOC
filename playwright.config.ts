@@ -26,7 +26,7 @@ export default defineConfig({
   // Seed a throwaway DB, then bring up the full app (API + client).
   webServer: {
     command:
-      "bash -c 'rm -f data/e2e.sqlite*; OIL_DB_PATH=data/e2e.sqlite npm run seed && OIL_DB_PATH=data/e2e.sqlite npm run dev'",
+      "bash -c 'rm -f data/e2e.sqlite*; VSME_DB_PATH=data/e2e.sqlite npm run seed && VSME_DB_PATH=data/e2e.sqlite npm run dev'",
     url: "http://localhost:5173",
     timeout: 120_000,
     reuseExistingServer: true,

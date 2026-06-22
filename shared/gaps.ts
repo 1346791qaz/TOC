@@ -68,7 +68,7 @@ export function linkDataElements(
 }
 
 // ---------------------------------------------------------------------------
-// The Data Gap Report — surfaces where the Operational Intelligence Layer is
+// The Data Gap Report — surfaces where the Value Stream Model is
 // blind. A row qualifies as a "gap" if its data is missing/partial, or if it
 // is a key data component (key data is always worth tracking explicitly).
 // ---------------------------------------------------------------------------

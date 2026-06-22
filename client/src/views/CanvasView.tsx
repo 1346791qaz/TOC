@@ -49,7 +49,7 @@ const EDGE_TYPE_INFO = [
 
 const LAYOUT_MODES: { value: LayoutMode; label: string }[] = [
   { value: "spine", label: "Process spine" },
-  { value: "full", label: "Full OIL" },
+  { value: "full", label: "Full Model" },
   { value: "constraint_focus", label: "Constraint focus" },
 ];
 

@@ -1,4 +1,4 @@
--- OIL Constraint Mapper — initial schema.
+-- Value Stream Model Engine — initial schema.
 -- Conventions: ids are uuid TEXT; timestamps are ISO-8601 TEXT; booleans are
 -- INTEGER (0/1); deleted_at is NULL for live rows. Foreign keys reference rows
 -- regardless of their soft-delete state — soft delete is enforced in queries.

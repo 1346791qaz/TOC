@@ -38,7 +38,7 @@ export function seed(): { seeded: boolean; subStepsAdded: number } {
     {
       name: "Precision Components Co.",
       client_org: "Aerospace machined-parts division",
-      notes: "Initial OIL engagement focused on the made-to-order machining line.",
+      notes: "Initial engagement focused on the made-to-order machining line.",
     },
     ID.engagement,
   );

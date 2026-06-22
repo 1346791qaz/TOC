@@ -1,9 +1,9 @@
 {
-  "name": "oil-constraint-mapper",
+  "name": "value-stream-model-engine",
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Operational Intelligence Layer (OIL) Constraint Mapper — a local-first Theory of Constraints analysis console.",
+  "description": "Value Stream Model Engine (VSME) — a local-first Theory of Constraints analysis console by Nexum Solutions.",
   "scripts": {
     "dev": "concurrently -k -n server,client -c blue,magenta \"npm:dev:server\" \"npm:dev:client\"",
     "dev:server": "tsx watch server/src/index.ts",

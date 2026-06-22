@@ -86,7 +86,7 @@ Don't stay on Opus for the follow-up routine work.
 
 ## Project Context
 
-**App:** Oil Constraint Mapper — a local-first Theory of Constraints analysis console.
+**App:** Value Stream Model Engine (VSME) — a local-first Theory of Constraints analysis console by Nexum Solutions.
 **Stack:** React frontend (Vite), Express backend, SQLite database (better-sqlite3), TypeScript throughout.
 **Test setup:**
 - Unit/integration tests: Vitest, covering `server/` and `shared/` (4 test files currently)

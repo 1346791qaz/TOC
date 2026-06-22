@@ -5,11 +5,11 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// Data lives under <repo>/data/oil.sqlite by default. Override with OIL_DB_PATH
+// Data lives under <repo>/data/oil.sqlite by default. Override with VSME_DB_PATH
 // (used by tests to point at a temp / in-memory DB). Read lazily so tests can
 // set the env var and reset the singleton between cases.
 export function dbPath(): string {
-  return process.env.OIL_DB_PATH ?? path.resolve(__dirname, "../../../data/oil.sqlite");
+  return process.env.VSME_DB_PATH ?? path.resolve(__dirname, "../../../data/oil.sqlite");
 }
 
 let db: Database.Database | null = null;

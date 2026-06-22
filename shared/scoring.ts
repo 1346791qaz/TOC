@@ -104,7 +104,7 @@ export function scoreConstraintCandidates(input: ScoringInput): ConstraintCandid
       addFactor(ensure("step", step.id, step.name), {
         key: "missing_key_data",
         label: "Missing / partial data",
-        detail: `${missingKey} missing key, ${partialKey} partial key, ${missingAny} other missing — the OIL is blind here.`,
+        detail: `${missingKey} missing key, ${partialKey} partial key, ${missingAny} other missing — the model is blind here.`,
         points,
       });
     }

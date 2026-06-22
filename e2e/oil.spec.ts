@@ -1,6 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 
-// Thorough end-to-end walkthrough of every OIL Constraint Mapper feature,
+// Thorough end-to-end walkthrough of every Value Stream Model Engine feature,
 // driven against a freshly seeded database (see playwright.config.ts webServer).
 // Runs serially so created/deleted entities have a predictable lifecycle.
 
@@ -17,7 +17,7 @@ const nav = (page: Page, name: string) =>
 async function gotoApp(page: Page) {
   await page.goto("/");
   // Bootstrap selects the seed engagement + value stream.
-  await expect(page.getByText("OIL · Constraint Mapper")).toBeVisible();
+  await expect(page.getByText("Value Stream Model Engine")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Made-to-Order Machined Parts" })).toBeVisible({
     timeout: 15_000,
   });
@@ -206,9 +206,9 @@ test("09 · assumptions: create", async ({ page }) => {
   await expect(page.getByText("E2E assumption to validate")).toBeVisible();
 });
 
-test("10 · OIL canvas: layouts, layers, node edit, drag-to-connect", async ({ page }) => {
+test("10 · VS canvas: layouts, layers, node edit, drag-to-connect", async ({ page }) => {
   await gotoApp(page);
-  await nav(page, "OIL Graph");
+  await nav(page, "VS Graph");
 
   // Nodes render.
   await expect(page.locator(".react-flow__node").first()).toBeVisible({ timeout: 15_000 });
@@ -220,7 +220,7 @@ test("10 · OIL canvas: layouts, layers, node edit, drag-to-connect", async ({ p
   await page.getByRole("button", { name: "Process spine" }).click();
   await expect(page.getByTestId("oilnode-persona")).toHaveCount(0); // spine = steps only
   await page.getByRole("button", { name: "Constraint focus" }).click();
-  await page.getByRole("button", { name: "Full OIL" }).click();
+  await page.getByRole("button", { name: "Full Model" }).click();
   await expect(page.getByTestId("oilnode-persona").first()).toBeVisible();
 
   // Layer toggle: turn personas off.
@@ -341,7 +341,7 @@ test("14 · steps: add a sub-step and drill into the level", async ({ page }) =>
 
 test("15 · canvas: expand a step's sub-steps inline", async ({ page }) => {
   await gotoApp(page);
-  await nav(page, "OIL Graph");
+  await nav(page, "VS Graph");
   await expect(page.getByTestId("oilnode-step").first()).toBeVisible({ timeout: 15_000 });
 
   // Inspection has the sub-step created in test 14 — expand it inline.
