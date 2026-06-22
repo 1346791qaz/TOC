@@ -11,6 +11,7 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "migrate": "tsx server/src/db/migrate.ts",
+    "clear-agreements": "tsx server/src/db/clear-agreements.ts",
     "seed": "tsx server/src/db/seed.ts",
     "typecheck": "tsc -b --noEmit",
     "test": "vitest run",
