@@ -8,6 +8,7 @@ import { getDb } from "./db/connection";
 import { crudRouter } from "./routes/crud";
 import { analyticsRouter } from "./routes/analytics";
 import { ioRouter } from "./routes/io";
+import { agreementRouter } from "./routes/agreement";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -31,6 +32,7 @@ function buildApp() {
   // Derived/analytical endpoints and portability.
   app.use("/api/analytics", analyticsRouter());
   app.use("/api/io", ioRouter());
+  app.use("/api/agreement", agreementRouter());
 
   // In production, serve the built frontend from dist/
   const distPath = path.resolve(__dirname, "../../dist");

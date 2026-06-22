@@ -18,6 +18,7 @@ import { useList } from "./lib/queries";
 import type { Engagement, ValueStream } from "@shared/schemas";
 import { LeftRail } from "./components/LeftRail";
 import { CommandPalette } from "./components/CommandPalette";
+import { useAgreement, UserAgreementModal } from "./components/UserAgreementModal";
 import { Overview } from "./views/Overview";
 import { StepsView } from "./views/StepsView";
 import { PersonasView } from "./views/PersonasView";
@@ -54,6 +55,7 @@ export const NAV: NavItem[] = [
 ];
 
 export default function App() {
+  const { showModal, accept } = useAgreement();
   const { engagementId, valueStreamId, view, setEngagement, setValueStream, setCommandOpen } =
     useUi();
 
@@ -117,6 +119,7 @@ export default function App() {
       </div>
 
       <CommandPalette />
+      {showModal && <UserAgreementModal onAccept={accept} />}
     </div>
   );
 }
