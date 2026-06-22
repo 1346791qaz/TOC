@@ -12,6 +12,7 @@ import {
   type Connection,
   type Edge,
   type Node,
+  type Viewport,
 } from "@xyflow/react";
 import { ChevronsDownUp, ChevronsUpDown, Info, Plus } from "lucide-react";
 import { EDGE_TYPES, type EdgeType, type FlowNodeType } from "@shared/enums";
@@ -52,10 +53,124 @@ const LAYOUT_MODES: { value: LayoutMode; label: string }[] = [
   { value: "constraint_focus", label: "Constraint focus" },
 ];
 
+// ---------------------------------------------------------------------------
+// Magnifier lens — shown while Alt is held over the canvas.
+// ---------------------------------------------------------------------------
+const LENS_W = 380;
+const LENS_H = 260;
+const MAG = 2.5;
+
+function ViewportSync({ viewport }: { viewport: Viewport }) {
+  const { setViewport } = useReactFlow();
+  useEffect(() => {
+    setViewport(viewport, { duration: 0 });
+  });
+  return null;
+}
+
+function MagnifierLens({
+  nodes,
+  edges,
+  mouseX,
+  mouseY,
+  canvasRect,
+  parentVp,
+}: {
+  nodes: Node<OilNodeData>[];
+  edges: Edge[];
+  mouseX: number;
+  mouseY: number;
+  canvasRect: DOMRect;
+  parentVp: Viewport;
+}) {
+  // Convert screen mouse position → canvas world coordinates.
+  const worldX = (mouseX - canvasRect.left - parentVp.x) / parentVp.zoom;
+  const worldY = (mouseY - canvasRect.top - parentVp.y) / parentVp.zoom;
+  const lensZoom = parentVp.zoom * MAG;
+  const lensVp: Viewport = {
+    x: LENS_W / 2 - worldX * lensZoom,
+    y: LENS_H / 2 - worldY * lensZoom,
+    zoom: lensZoom,
+  };
+
+  // Position to the right of the cursor; flip left if near screen edge.
+  let left = mouseX + 24;
+  let top = mouseY - LENS_H / 2;
+  if (left + LENS_W > window.innerWidth - 8) left = mouseX - LENS_W - 24;
+  top = Math.max(8, Math.min(top, window.innerHeight - LENS_H - 8));
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        left,
+        top,
+        width: LENS_W,
+        height: LENS_H,
+        border: "2px solid hsl(38 92% 55%)",
+        borderRadius: 8,
+        overflow: "hidden",
+        zIndex: 9999,
+        pointerEvents: "none",
+        boxShadow: "0 8px 32px hsl(0 0% 0% / 0.65)",
+        background: "hsl(220 26% 8%)",
+      }}
+    >
+      <ReactFlowProvider>
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
+          defaultViewport={lensVp}
+          nodesDraggable={false}
+          nodesConnectable={false}
+          elementsSelectable={false}
+          panOnDrag={false}
+          zoomOnScroll={false}
+          zoomOnPinch={false}
+          zoomOnDoubleClick={false}
+          preventScrolling={false}
+          proOptions={{ hideAttribution: true }}
+        >
+          <ViewportSync viewport={lensVp} />
+        </ReactFlow>
+      </ReactFlowProvider>
+      {/* Crosshair centered on the mouse world position */}
+      <div
+        style={{
+          position: "absolute",
+          left: LENS_W / 2,
+          top: LENS_H / 2,
+          transform: "translate(-50%, -50%)",
+          pointerEvents: "none",
+        }}
+      >
+        <div style={{ position: "absolute", width: 1, height: 16, background: "hsl(38 92% 55%)", left: 0, top: -8 }} />
+        <div style={{ position: "absolute", height: 1, width: 16, background: "hsl(38 92% 55%)", top: 0, left: -8 }} />
+      </div>
+      <div
+        style={{
+          position: "absolute",
+          bottom: 6,
+          right: 8,
+          fontSize: 10,
+          fontWeight: 600,
+          letterSpacing: "0.05em",
+          color: "hsl(38 92% 55%)",
+          opacity: 0.7,
+        }}
+      >
+        {MAG}× lens · Alt
+      </div>
+    </div>
+  );
+}
+
 function CanvasInner({ vsId }: { vsId: string }) {
   const { layoutMode, layers, expandedSteps, setLayoutMode, toggleLayer, toggleExpand, setExpanded } =
     useUi();
-  const { fitView } = useReactFlow();
+  const { fitView, getViewport } = useReactFlow();
 
   const valueStreams = useList<ValueStream>("value_streams");
   const steps = useList<ProcessStep>("process_steps", {
@@ -84,6 +199,13 @@ function CanvasInner({ vsId }: { vsId: string }) {
     y: number;
   } | null>(null);
   const [showEdgeInfo, setShowEdgeInfo] = useState(false);
+  const canvasWrapRef = useRef<HTMLDivElement>(null);
+  const [magnifier, setMagnifier] = useState<{
+    x: number;
+    y: number;
+    rect: DOMRect;
+    vp: Viewport;
+  } | null>(null);
 
   const allSteps = useMemo(() => steps.data ?? [], [steps.data]);
   const allStepIds = useMemo(() => new Set(allSteps.map((s) => s.id)), [allSteps]);
@@ -192,6 +314,26 @@ function CanvasInner({ vsId }: { vsId: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, allSteps, personas.data, allDataDefs.data, allSDEs.data, allStepPersonas.data, constraints.data, edges.data, layoutMode, layers, expandedSet]);
 
+  // Magnifier: show lens while Alt is held and mouse is over the canvas.
+  useEffect(() => {
+    const el = canvasWrapRef.current;
+    if (!el) return;
+    const onMove = (e: MouseEvent) => {
+      if (!e.altKey) { setMagnifier(null); return; }
+      setMagnifier({ x: e.clientX, y: e.clientY, rect: el.getBoundingClientRect(), vp: getViewport() });
+    };
+    const onKeyUp = (e: KeyboardEvent) => { if (e.key === "Alt") setMagnifier(null); };
+    const onLeave = () => setMagnifier(null);
+    el.addEventListener("mousemove", onMove);
+    el.addEventListener("mouseleave", onLeave);
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      el.removeEventListener("mousemove", onMove);
+      el.removeEventListener("mouseleave", onLeave);
+      window.removeEventListener("keyup", onKeyUp);
+    };
+  }, [getViewport]);
+
   return (
     <div className="flex h-full">
       <div className="flex min-w-0 flex-1 flex-col">
@@ -213,7 +355,7 @@ function CanvasInner({ vsId }: { vsId: string }) {
           </Button>
         </div>
 
-        <div className="relative min-w-0 flex-1">
+        <div ref={canvasWrapRef} className="relative min-w-0 flex-1">
           <div className="absolute left-3 top-3 z-10 flex flex-col gap-2">
             <div className="flex gap-1 rounded-md border border-border bg-surface/90 p-1 backdrop-blur">
               {LAYOUT_MODES.map((m) => (
@@ -395,6 +537,17 @@ function CanvasInner({ vsId }: { vsId: string }) {
             </Button>
           </div>
         </div>
+      )}
+
+      {magnifier && (
+        <MagnifierLens
+          nodes={nodes}
+          edges={rfEdges}
+          mouseX={magnifier.x}
+          mouseY={magnifier.y}
+          canvasRect={magnifier.rect}
+          parentVp={magnifier.vp}
+        />
       )}
     </div>
   );
