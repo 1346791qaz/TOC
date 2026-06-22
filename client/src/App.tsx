@@ -40,7 +40,7 @@ export interface NavItem {
 
 export const NAV: NavItem[] = [
   { view: "overview", label: "Overview", icon: Activity, group: "analysis" },
-  { view: "canvas", label: "OIL Graph", icon: Network, group: "analysis" },
+  { view: "canvas", label: "VS Graph", icon: Network, group: "analysis" },
   { view: "candidates", label: "Constraint Candidates", icon: GitBranch, group: "analysis" },
   { view: "gaps", label: "Data Gap Report", icon: AlertTriangle, group: "analysis" },
   { view: "steps", label: "Process Steps", icon: Workflow, group: "model" },
@@ -87,15 +87,12 @@ export default function App() {
 
   return (
     <div className="flex h-full flex-col bg-background">
-      <header className="flex h-11 shrink-0 items-center gap-3 border-b border-border bg-surface px-3">
-        <div className="flex items-center gap-2">
-          <div className="grid h-6 w-6 place-items-center rounded bg-primary text-primary-foreground">
-            <Network size={14} />
-          </div>
-          <span className="text-sm font-semibold tracking-tight">OIL · Constraint Mapper</span>
-        </div>
-        <span className="text-[11px] uppercase tracking-widest text-muted-foreground">
-          Operational Intelligence Layer
+      <header className="flex h-12 shrink-0 items-center gap-3 border-b border-border bg-surface px-4">
+        <img src="/icon no bg.png" alt="Nexum Solutions" className="h-8 w-auto" />
+        <img src="/name and slogan trimmed no bg.png" alt="Nexum Solutions — Guiding Success Through Connection" className="h-7 w-auto" />
+        <div className="mx-2 h-6 w-px bg-border" />
+        <span className="text-sm font-semibold tracking-tight text-foreground">
+          Value Stream Model Engine
         </span>
         <button
           onClick={() => setCommandOpen(true)}
@@ -165,8 +162,8 @@ function ViewRouter({
 
 function EmptyState() {
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-muted-foreground">
-      <Network size={40} className="opacity-40" />
+    <div className="flex h-full flex-col items-center justify-center gap-3 text-center text-muted-foreground">
+      <img src="/icon no bg.png" alt="" className="h-16 w-auto opacity-40" />
       <p className="text-sm">Select or create an engagement and value stream to begin mapping.</p>
       <p className="text-xs opacity-70">The left rail is your entry point.</p>
     </div>
