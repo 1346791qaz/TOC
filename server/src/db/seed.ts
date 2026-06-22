@@ -3,6 +3,7 @@ import { runMigrations } from "./migrate";
 import { getDb } from "./connection";
 import { repos } from "../repositories";
 import { seedAcme } from "./seedAcme";
+import { seedBoeing737 } from "./seedBoeing737";
 
 // Deterministic ids keep the seed idempotent and make cross-references stable.
 const ID = {
@@ -30,8 +31,9 @@ export function seed(): { seeded: boolean; subStepsAdded: number } {
   // If the primary engagement already exists, still ensure the ACME sample is
   // present (it has its own idempotency guard) and return.
   if (repos.engagements.get(ID.engagement, { includeDeleted: true })) {
-    const r = seedAcme();
-    return { seeded: r.seeded, subStepsAdded: r.subStepsAdded };
+    const acme    = seedAcme();
+    const boeing  = seedBoeing737();
+    return { seeded: acme.seeded, subStepsAdded: acme.subStepsAdded + boeing.subStepsAdded };
   }
 
   repos.engagements.create(
@@ -327,8 +329,9 @@ export function seed(): { seeded: boolean; subStepsAdded: number } {
   // Seed the ACME sample engagement after the primary so the primary remains
   // the default-selected engagement on first load.
   const acme = seedAcme();
+  const boeing = seedBoeing737();
 
-  return { seeded: true, subStepsAdded: acme.subStepsAdded };
+  return { seeded: true, subStepsAdded: acme.subStepsAdded + boeing.subStepsAdded };
 }
 
 // Cross-platform "run directly?" check (Windows paths break a string compare).

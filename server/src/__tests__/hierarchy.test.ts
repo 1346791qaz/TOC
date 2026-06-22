@@ -49,10 +49,10 @@ describe("process step hierarchy", () => {
     seed();
     const all = repos.process_steps.list();
     const subs = all.filter((s) => s.parent_step_id);
-    // 20 second-generation + 9 third-generation sub-steps.
-    expect(subs.length).toBe(29);
+    // 20 ACME 2nd-gen + 9 ACME 3rd-gen + 10 Boeing 737 sub-steps (5 × Step 6, 5 × Step 11).
+    expect(subs.length).toBe(39);
     const parents = new Set(subs.map((s) => s.parent_step_id));
-    expect(parents.size).toBe(8);
+    expect(parents.size).toBe(10);
 
     // A 3-generation chain exists: a sub-step whose parent is itself a sub-step.
     const byId = new Map(all.map((s) => [s.id, s]));
