@@ -1,11 +1,15 @@
 import express from "express";
 import cors from "cors";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { ENTITY_KEYS } from "@shared/schemas";
 import { runMigrations } from "./db/migrate";
 import { getDb } from "./db/connection";
 import { crudRouter } from "./routes/crud";
 import { analyticsRouter } from "./routes/analytics";
 import { ioRouter } from "./routes/io";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const PORT = Number(process.env.PORT ?? 3001);
 
@@ -27,6 +31,13 @@ function buildApp() {
   // Derived/analytical endpoints and portability.
   app.use("/api/analytics", analyticsRouter());
   app.use("/api/io", ioRouter());
+
+  // In production, serve the built frontend from dist/
+  const distPath = path.resolve(__dirname, "../../dist");
+  app.use(express.static(distPath));
+  app.get("*", (_req, res) => {
+    res.sendFile(path.join(distPath, "index.html"));
+  });
 
   return app;
 }
