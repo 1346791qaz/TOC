@@ -54,7 +54,8 @@ export function UserAgreementModal({ onAccept }: { onAccept: () => void }) {
             </h2>
           </div>
           <p className="text-xs text-muted-foreground">
-            You must read and accept this agreement before using the Value Stream Model Engine.
+            This is a <strong>proof-of-concept demonstration</strong>. You must read and accept
+            this agreement before proceeding. Do NOT use for actual business operations.
           </p>
         </div>
 
@@ -67,18 +68,27 @@ export function UserAgreementModal({ onAccept }: { onAccept: () => void }) {
           <section className="space-y-4">
             <p>
               This User Agreement ("Agreement") governs your access to and use of the{" "}
-              <strong>Value Stream Model Engine</strong> (the "Application"), developed and owned
-              by <strong>Nexum Solutions</strong> and its creator ("Owner"). By clicking "I
-              Accept" you agree to be legally bound by every term below. If you do not agree, you
-              must not use the Application.
+              <strong>Value Stream Model Engine</strong> (the "Application"), a{" "}
+              <strong>proof-of-concept demonstration</strong> developed by{" "}
+              <strong>Nexum Solutions</strong> and its creator ("Owner"). By clicking "I Accept"
+              you agree to be legally bound by every term below. If you do not agree, you must not
+              use the Application.
             </p>
 
             <div>
-              <h3 className="mb-1 font-semibold">1. Grant of Access</h3>
+              <h3 className="mb-1 font-semibold">1. Permitted Use — Demo / POC Only</h3>
               <p>
                 Nexum Solutions grants you a limited, non-exclusive, non-transferable right to
-                access and use the Application solely for your authorized internal business
-                purposes. This right may be revoked at any time.
+                access and use the Application <strong>solely as a proof-of-concept or
+                demonstration</strong> for evaluation purposes. You acknowledge and agree that
+                this Application is in early/experimental stages and is{" "}
+                <strong>NOT approved, certified, or intended for actual business operations</strong>.
+              </p>
+              <p className="mt-2 text-foreground/90">
+                Any reliance on analysis, output, or decisions made using this Application for
+                actual business purposes is entirely at your own risk and is explicitly
+                unauthorized. Nexum Solutions bears no responsibility for any business decisions
+                made based on this demo.
               </p>
             </div>
 
@@ -120,12 +130,16 @@ export function UserAgreementModal({ onAccept }: { onAccept: () => void }) {
               <p>You agree that you will not:</p>
               <ul className="mt-2 list-disc space-y-1 pl-5 text-foreground/90">
                 <li>
+                  Use the Application for any actual business operations, financial decisions, or
+                  production work;
+                </li>
+                <li>
                   Copy, reproduce, reverse-engineer, decompile, disassemble, or create derivative
                   works from the Application or any part of it;
                 </li>
                 <li>
-                  Use the Application for any purpose other than the specific authorized purpose
-                  for which access was granted;
+                  Use the Application for any purpose other than the specific authorized
+                  proof-of-concept evaluation for which access was granted;
                 </li>
                 <li>
                   Remove, alter, or obscure any proprietary notices, trademarks, or branding
@@ -139,25 +153,40 @@ export function UserAgreementModal({ onAccept }: { onAccept: () => void }) {
             </div>
 
             <div>
-              <h3 className="mb-1 font-semibold">5. No Warranties</h3>
+              <h3 className="mb-1 font-semibold">5. No Warranties; Experimental Status</h3>
               <p>
-                The Application is provided "as is" without warranty of any kind, express or
-                implied. Nexum Solutions makes no warranty that the Application will be
-                uninterrupted, error-free, or that results will be accurate or complete.
+                <strong>
+                  The Application is provided "as is" without warranty of any kind, express or
+                  implied.
+                </strong>{" "}
+                As an experimental proof-of-concept, Nexum Solutions makes no warranty that the
+                Application will be reliable, uninterrupted, error-free, or that results will be
+                accurate, complete, or fit for any business purpose whatsoever. Data loss,
+                corruption, or unavailability may occur without notice.
               </p>
             </div>
 
             <div>
               <h3 className="mb-1 font-semibold">6. Limitation of Liability</h3>
               <p>
-                In no event shall Nexum Solutions or its creator be liable for any indirect,
-                incidental, special, or consequential damages arising out of or in connection
-                with your use of, or inability to use, the Application.
+                In no event shall Nexum Solutions or its creator be liable for any direct,
+                indirect, incidental, special, or consequential damages, including but not limited
+                to lost profits, lost data, or business interruption, arising out of or in
+                connection with your use of, or inability to use, the Application.
               </p>
             </div>
 
             <div>
-              <h3 className="mb-1 font-semibold">7. Entire Agreement</h3>
+              <h3 className="mb-1 font-semibold">7. Revocation of Access</h3>
+              <p>
+                Nexum Solutions reserves the right to revoke your access to the Application at
+                any time without notice or cause. Upon revocation, all data generated or stored
+                may be permanently deleted.
+              </p>
+            </div>
+
+            <div>
+              <h3 className="mb-1 font-semibold">8. Entire Agreement</h3>
               <p>
                 This Agreement constitutes the entire understanding between you and Nexum
                 Solutions regarding your use of the Application and supersedes any prior
@@ -165,9 +194,11 @@ export function UserAgreementModal({ onAccept }: { onAccept: () => void }) {
               </p>
             </div>
 
-            <p className="rounded-md border border-border bg-muted/40 px-4 py-3 text-xs text-muted-foreground">
-              Unauthorized use, disclosure, copying, or distribution of this Application or its
-              outputs may subject you to civil and criminal penalties under applicable law.
+            <p className="rounded-md border border-status-critical/20 bg-status-critical/5 px-4 py-3 text-xs text-status-critical/90">
+              <strong>⚠ Critical:</strong> This is a proof-of-concept demonstration only. Do NOT
+              use for actual business decisions, operations, or as a production system. Unauthorized
+              business use, disclosure, copying, or distribution may subject you to civil and
+              criminal penalties under applicable law.
             </p>
           </section>
         </div>
