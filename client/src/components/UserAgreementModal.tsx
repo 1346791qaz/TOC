@@ -30,6 +30,9 @@ export function useAgreement() {
 }
 
 export function UserAgreementModal({ onAccept }: { onAccept: () => void }) {
+  const [canAccept, setCanAccept] = React.useState(false);
+  const scrollRef = React.useRef<HTMLDivElement>(null);
+
   // Block Escape key — this modal cannot be dismissed without accepting.
   React.useEffect(() => {
     const block = (e: KeyboardEvent) => {
@@ -37,6 +40,15 @@ export function UserAgreementModal({ onAccept }: { onAccept: () => void }) {
     };
     window.addEventListener("keydown", block, { capture: true });
     return () => window.removeEventListener("keydown", block, { capture: true });
+  }, []);
+
+  const handleScroll = React.useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    // Allow a 24px tolerance so the button unlocks just before the absolute bottom.
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 24) {
+      setCanAccept(true);
+    }
   }, []);
 
   return (
@@ -60,7 +72,11 @@ export function UserAgreementModal({ onAccept }: { onAccept: () => void }) {
         </div>
 
         {/* Scrollable body */}
-        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5 text-sm leading-relaxed text-foreground">
+        <div
+          ref={scrollRef}
+          onScroll={handleScroll}
+          className="min-h-0 flex-1 overflow-y-auto px-6 py-5 text-sm leading-relaxed text-foreground"
+        >
           <p className="mb-4 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
             Please read carefully
           </p>
@@ -207,10 +223,24 @@ export function UserAgreementModal({ onAccept }: { onAccept: () => void }) {
         <div className="shrink-0 border-t border-border px-6 py-4">
           <div className="flex items-center justify-between gap-4">
             <p className="text-xs text-muted-foreground">
-              By clicking <strong>"I Accept"</strong> you confirm that you have read,
-              understood, and agree to be bound by this Agreement.
+              {canAccept ? (
+                <>
+                  By clicking <strong>"I Accept"</strong> you confirm that you have read,
+                  understood, and agree to be bound by this Agreement.
+                </>
+              ) : (
+                <span className="flex items-center gap-1.5">
+                  <span>↓</span>
+                  <span>Scroll to the bottom to enable acceptance.</span>
+                </span>
+              )}
             </p>
-            <Button onClick={onAccept} size="md" className="shrink-0 px-6">
+            <Button
+              onClick={onAccept}
+              disabled={!canAccept}
+              size="md"
+              className="shrink-0 px-6"
+            >
               I Accept
             </Button>
           </div>
