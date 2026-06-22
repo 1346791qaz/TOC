@@ -5,9 +5,15 @@ const STORAGE_KEY = "vsme_agreement_v1";
 
 export function useAgreement() {
   const [showModal, setShowModal] = React.useState(false);
+  const [checking, setChecking] = React.useState(
+    () => localStorage.getItem(STORAGE_KEY) !== "accepted",
+  );
 
   React.useEffect(() => {
-    if (localStorage.getItem(STORAGE_KEY) === "accepted") return;
+    if (localStorage.getItem(STORAGE_KEY) === "accepted") {
+      setChecking(false);
+      return;
+    }
     fetch("/api/agreement/status")
       .then((r) => r.json())
       .then((data: { accepted: boolean }) => {
@@ -17,16 +23,18 @@ export function useAgreement() {
           setShowModal(true);
         }
       })
-      .catch(() => setShowModal(true));
+      .catch(() => setShowModal(true))
+      .finally(() => setChecking(false));
   }, []);
 
   const accept = React.useCallback(() => {
     fetch("/api/agreement/accept", { method: "POST" }).catch(() => {});
     localStorage.setItem(STORAGE_KEY, "accepted");
     setShowModal(false);
+    setChecking(false);
   }, []);
 
-  return { showModal, accept };
+  return { showModal, checking, accept };
 }
 
 export function UserAgreementModal({ onAccept }: { onAccept: () => void }) {

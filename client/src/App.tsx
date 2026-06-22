@@ -19,6 +19,7 @@ import type { Engagement, ValueStream } from "@shared/schemas";
 import { LeftRail } from "./components/LeftRail";
 import { CommandPalette } from "./components/CommandPalette";
 import { useAgreement, UserAgreementModal } from "./components/UserAgreementModal";
+import { useAuth, PasswordModal } from "./components/PasswordModal";
 import { Overview } from "./views/Overview";
 import { StepsView } from "./views/StepsView";
 import { PersonasView } from "./views/PersonasView";
@@ -55,7 +56,8 @@ export const NAV: NavItem[] = [
 ];
 
 export default function App() {
-  const { showModal, accept } = useAgreement();
+  const { showModal, checking: checkingAgreement, accept } = useAgreement();
+  const { needsPassword, login, error: loginError, loading: loginLoading } = useAuth();
   const { engagementId, valueStreamId, view, setEngagement, setValueStream, setCommandOpen } =
     useUi();
 
@@ -120,6 +122,9 @@ export default function App() {
 
       <CommandPalette />
       {showModal && <UserAgreementModal onAccept={accept} />}
+      {!checkingAgreement && !showModal && needsPassword && (
+        <PasswordModal onLogin={login} error={loginError} loading={loginLoading} />
+      )}
     </div>
   );
 }
