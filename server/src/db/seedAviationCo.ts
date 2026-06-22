@@ -256,10 +256,10 @@ const PERSONAS: PersonaDef[] = [
   { n: 12, name: "VP, Supply Chain & Fabrication", role: "Vice President, Supply Chain & Fabrication", fn: "Executive Leadership", scope: "system", resp: "Accountable for fuselage integration program delivery commitments to the OEM customer's final assembly facility; has initiated engagement with Nexum Solutions to reduce PM&O OPR backlog and address its root causes.", auth: "Full program authority. Approves premium freight above threshold, significant schedule deviations, and supplier escalations above Expeditor authority." },
 ];
 
-export function seedBoeing737(): { seeded: boolean; subStepsAdded: number } {
+export function seedAviationCo(): { seeded: boolean; subStepsAdded: number } {
   runMigrations();
   if (repos.engagements.get(E, { includeDeleted: true })) {
-    const added = seedBoeing737SubSteps();
+    const added = seedAviationCoSubSteps();
     return { seeded: false, subStepsAdded: added };
   }
 
@@ -634,7 +634,7 @@ export function seedBoeing737(): { seeded: boolean; subStepsAdded: number } {
     });
   }
 
-  const added = seedBoeing737SubSteps();
+  const added = seedAviationCoSubSteps();
   return { seeded: true, subStepsAdded: added };
 }
 
@@ -643,7 +643,7 @@ export function seedBoeing737(): { seeded: boolean; subStepsAdded: number } {
 // operation) and Step 11 (PM&O Discovery — the OPR trigger event).
 // Additive and idempotent.
 // ---------------------------------------------------------------------------
-export function seedBoeing737SubSteps(): number {
+export function seedAviationCoSubSteps(): number {
   runMigrations();
   if (!repos.process_steps.get(S(6), { includeDeleted: true })) return 0;
 
@@ -763,8 +763,8 @@ export function seedBoeing737SubSteps(): number {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const r = seedBoeing737();
+  const r = seedAviationCo();
   const base = r.seeded ? "Aviation Company fuselage integration engagement inserted" : "already present";
   const subs = r.subStepsAdded > 0 ? `; added ${r.subStepsAdded} sub-steps` : "";
-  console.log(`[seed:boeing737] ${base}${subs}`);
+  console.log(`[seed:aviation-co] ${base}${subs}`);
 }
