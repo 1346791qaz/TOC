@@ -58,7 +58,7 @@ const LAYOUT_MODES: { value: LayoutMode; label: string }[] = [
 // ---------------------------------------------------------------------------
 const LENS_W = 380;
 const LENS_H = 260;
-const MAG = 2.5;
+const LENS_ZOOM = 1.0; // fixed 100% zoom regardless of current canvas zoom
 
 function ViewportSync({ viewport }: { viewport: Viewport }) {
   const { setViewport } = useReactFlow();
@@ -86,7 +86,7 @@ function MagnifierLens({
   // Convert screen mouse position → canvas world coordinates.
   const worldX = (mouseX - canvasRect.left - parentVp.x) / parentVp.zoom;
   const worldY = (mouseY - canvasRect.top - parentVp.y) / parentVp.zoom;
-  const lensZoom = parentVp.zoom * MAG;
+  const lensZoom = LENS_ZOOM;
   const lensVp: Viewport = {
     x: LENS_W / 2 - worldX * lensZoom,
     y: LENS_H / 2 - worldY * lensZoom,
@@ -161,7 +161,7 @@ function MagnifierLens({
           opacity: 0.7,
         }}
       >
-        {MAG}× lens · Alt
+        100% · Alt
       </div>
     </div>
   );
