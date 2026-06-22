@@ -6,6 +6,7 @@ import path from "node:path";
 // schemas are imported by both client and server via the @shared alias.
 export default defineConfig({
   plugins: [react()],
+  publicDir: "client/public",
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "client/src"),

@@ -3,6 +3,7 @@ import { runMigrations } from "./migrate";
 import { getDb } from "./connection";
 import { repos } from "../repositories";
 import { seedAcme } from "./seedAcme";
+import { seedAviationCo } from "./seedAviationCo";
 
 // Deterministic ids keep the seed idempotent and make cross-references stable.
 const ID = {
@@ -30,15 +31,16 @@ export function seed(): { seeded: boolean; subStepsAdded: number } {
   // If the primary engagement already exists, still ensure the ACME sample is
   // present (it has its own idempotency guard) and return.
   if (repos.engagements.get(ID.engagement, { includeDeleted: true })) {
-    const r = seedAcme();
-    return { seeded: r.seeded, subStepsAdded: r.subStepsAdded };
+    const acme    = seedAcme();
+    const aviationCo  = seedAviationCo();
+    return { seeded: acme.seeded, subStepsAdded: acme.subStepsAdded + aviationCo.subStepsAdded };
   }
 
   repos.engagements.create(
     {
       name: "Precision Components Co.",
       client_org: "Aerospace machined-parts division",
-      notes: "Initial OIL engagement focused on the made-to-order machining line.",
+      notes: "Initial engagement focused on the made-to-order machining line.",
     },
     ID.engagement,
   );
@@ -209,7 +211,9 @@ export function seed(): { seeded: boolean; subStepsAdded: number } {
   }
 
   // ---- data elements (with deliberate gaps) -----------------------------
-  const de: Record<string, unknown>[] = [
+  // Each entry defines the field (data_elements) and its step binding (step_data_elements).
+  type DEDef = { step_id: string; name: string; binding_point: string; data_type?: string; source_system?: string; presence: string; quality_notes?: string; is_key: boolean };
+  const de: DEDef[] = [
     { step_id: ID.steps.intake, name: "Customer drawing rev", binding_point: "entry", data_type: "PDF", source_system: "PLM", presence: "present", is_key: true },
     { step_id: ID.steps.intake, name: "Promised ship date", binding_point: "exit", data_type: "date", source_system: "ERP", presence: "partial", quality_notes: "Often a placeholder, refined later", is_key: true },
     { step_id: ID.steps.material, name: "Material certs", binding_point: "entry", data_type: "doc", source_system: "Supplier portal", presence: "missing", quality_notes: "Certs arrive late, block traceability", is_key: true },
@@ -221,7 +225,27 @@ export function seed(): { seeded: boolean; subStepsAdded: number } {
     { step_id: ID.steps.finish, name: "Coating spec", binding_point: "entry", data_type: "doc", source_system: "PLM", presence: "present", is_key: false },
     { step_id: ID.steps.ship, name: "Shipping docs", binding_point: "exit", data_type: "doc", source_system: "ERP", presence: "present", is_key: false },
   ];
-  for (const d of de) repos.data_elements.create(d);
+  for (const d of de) {
+    const def = repos.data_elements.create({
+      value_stream_id: ID.vs,
+      name: d.name,
+      data_type: d.data_type ?? null,
+      source_system: d.source_system ?? null,
+      business_description: null,
+      length: null,
+      table_or_view: null,
+      field_name: null,
+      example_value: null,
+    });
+    repos.step_data_elements.create({
+      step_id: d.step_id,
+      data_element_id: def.id,
+      binding_point: d.binding_point,
+      presence: d.presence,
+      quality_notes: d.quality_notes ?? null,
+      is_key: d.is_key,
+    });
+  }
 
   // ---- constraints ------------------------------------------------------
   repos.constraints.create({
@@ -305,8 +329,9 @@ export function seed(): { seeded: boolean; subStepsAdded: number } {
   // Seed the ACME sample engagement after the primary so the primary remains
   // the default-selected engagement on first load.
   const acme = seedAcme();
+  const aviationCo = seedAviationCo();
 
-  return { seeded: true, subStepsAdded: acme.subStepsAdded };
+  return { seeded: true, subStepsAdded: acme.subStepsAdded + aviationCo.subStepsAdded };
 }
 
 // Cross-platform "run directly?" check (Windows paths break a string compare).

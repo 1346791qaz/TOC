@@ -10,12 +10,12 @@ import { runMigrations } from "../db/migrate";
  */
 export function freshDb(): () => void {
   const dir = mkdtempSync(path.join(tmpdir(), "oil-test-"));
-  process.env.OIL_DB_PATH = path.join(dir, "test.sqlite");
+  process.env.VSME_DB_PATH = path.join(dir, "test.sqlite");
   resetDbSingleton();
   runMigrations();
   return () => {
     resetDbSingleton();
     rmSync(dir, { recursive: true, force: true });
-    delete process.env.OIL_DB_PATH;
+    delete process.env.VSME_DB_PATH;
   };
 }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Background,
   BackgroundVariant,
@@ -12,8 +12,9 @@ import {
   type Connection,
   type Edge,
   type Node,
+  type Viewport,
 } from "@xyflow/react";
-import { ChevronsDownUp, ChevronsUpDown, Plus } from "lucide-react";
+import { ChevronsDownUp, ChevronsUpDown, Info, Plus } from "lucide-react";
 import { EDGE_TYPES, type EdgeType, type FlowNodeType } from "@shared/enums";
 import type {
   Constraint,
@@ -21,10 +22,12 @@ import type {
   FlowEdge,
   Persona,
   ProcessStep,
+  StepDataElement,
   StepPersona,
   ValueStream,
 } from "@shared/schemas";
-import { useCreate, useList, useSoftDelete } from "@/lib/queries";
+import { linkDataElements } from "@shared/gaps";
+import { useCreate, useList, useSoftDelete, useUpdate } from "@/lib/queries";
 import { useUi, type LayoutMode } from "@/store";
 import { cn } from "@/lib/utils";
 import { titleCase } from "@/lib/display";
@@ -34,19 +37,140 @@ import { EntityModalForm } from "@/components/EntityModalForm";
 import { buildGraph, type OilNodeData } from "./canvas/buildGraph";
 import { buildAttachedGraph } from "./canvas/attachedLayout";
 import { layoutElk } from "./canvas/layout";
-import { nodeTypes } from "./canvas/nodes";
+import { nodeTypes, edgeTypes } from "./canvas/nodes";
 import { DetailDrawer } from "./canvas/DetailDrawer";
+
+const EDGE_TYPE_INFO = [
+  { type: "sequence",    color: "hsl(215 20% 45%)", label: "Sequence",    desc: "Steps must happen in this order; A flows directly into B." },
+  { type: "dependency",  color: "hsl(38 92% 55%)",  label: "Dependency",  desc: "B cannot start until A delivers something (data, approval, artifact)." },
+  { type: "data_flow",   color: "hsl(190 70% 50%)", label: "Data Flow",   desc: "A piece of information or data artifact moves from A to B." },
+  { type: "handoff",     color: "hsl(270 55% 62%)", label: "Handoff",     desc: "Work is physically passed from one team or person to another." },
+] as const;
 
 const LAYOUT_MODES: { value: LayoutMode; label: string }[] = [
   { value: "spine", label: "Process spine" },
-  { value: "full", label: "Full OIL" },
+  { value: "full", label: "Full Model" },
   { value: "constraint_focus", label: "Constraint focus" },
 ];
+
+// ---------------------------------------------------------------------------
+// Magnifier lens — shown while Alt is held over the canvas.
+// ---------------------------------------------------------------------------
+const LENS_W = 380;
+const LENS_H = 260;
+const LENS_ZOOM = 1.0; // fixed 100% zoom regardless of current canvas zoom
+
+function ViewportSync({ viewport }: { viewport: Viewport }) {
+  const { setViewport } = useReactFlow();
+  useEffect(() => {
+    setViewport(viewport, { duration: 0 });
+  });
+  return null;
+}
+
+function MagnifierLens({
+  nodes,
+  edges,
+  mouseX,
+  mouseY,
+  canvasRect,
+  parentVp,
+}: {
+  nodes: Node<OilNodeData>[];
+  edges: Edge[];
+  mouseX: number;
+  mouseY: number;
+  canvasRect: DOMRect;
+  parentVp: Viewport;
+}) {
+  // Convert screen mouse position → canvas world coordinates.
+  const worldX = (mouseX - canvasRect.left - parentVp.x) / parentVp.zoom;
+  const worldY = (mouseY - canvasRect.top - parentVp.y) / parentVp.zoom;
+  const lensZoom = LENS_ZOOM;
+  const lensVp: Viewport = {
+    x: LENS_W / 2 - worldX * lensZoom,
+    y: LENS_H / 2 - worldY * lensZoom,
+    zoom: lensZoom,
+  };
+
+  // Position to the right of the cursor; flip left if near screen edge.
+  let left = mouseX + 24;
+  let top = mouseY - LENS_H / 2;
+  if (left + LENS_W > window.innerWidth - 8) left = mouseX - LENS_W - 24;
+  top = Math.max(8, Math.min(top, window.innerHeight - LENS_H - 8));
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        left,
+        top,
+        width: LENS_W,
+        height: LENS_H,
+        border: "2px solid hsl(38 92% 55%)",
+        borderRadius: 8,
+        overflow: "hidden",
+        zIndex: 9999,
+        pointerEvents: "none",
+        boxShadow: "0 8px 32px hsl(0 0% 0% / 0.65)",
+        background: "hsl(220 26% 8%)",
+      }}
+    >
+      <ReactFlowProvider>
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
+          defaultViewport={lensVp}
+          nodesDraggable={false}
+          nodesConnectable={false}
+          elementsSelectable={false}
+          panOnDrag={false}
+          zoomOnScroll={false}
+          zoomOnPinch={false}
+          zoomOnDoubleClick={false}
+          preventScrolling={false}
+          proOptions={{ hideAttribution: true }}
+        >
+          <ViewportSync viewport={lensVp} />
+        </ReactFlow>
+      </ReactFlowProvider>
+      {/* Crosshair centered on the mouse world position */}
+      <div
+        style={{
+          position: "absolute",
+          left: LENS_W / 2,
+          top: LENS_H / 2,
+          transform: "translate(-50%, -50%)",
+          pointerEvents: "none",
+        }}
+      >
+        <div style={{ position: "absolute", width: 1, height: 16, background: "hsl(38 92% 55%)", left: 0, top: -8 }} />
+        <div style={{ position: "absolute", height: 1, width: 16, background: "hsl(38 92% 55%)", top: 0, left: -8 }} />
+      </div>
+      <div
+        style={{
+          position: "absolute",
+          bottom: 6,
+          right: 8,
+          fontSize: 10,
+          fontWeight: 600,
+          letterSpacing: "0.05em",
+          color: "hsl(38 92% 55%)",
+          opacity: 0.7,
+        }}
+      >
+        100% · Alt
+      </div>
+    </div>
+  );
+}
 
 function CanvasInner({ vsId }: { vsId: string }) {
   const { layoutMode, layers, expandedSteps, setLayoutMode, toggleLayer, toggleExpand, setExpanded } =
     useUi();
-  const { fitView } = useReactFlow();
+  const { fitView, getViewport } = useReactFlow();
 
   const valueStreams = useList<ValueStream>("value_streams");
   const steps = useList<ProcessStep>("process_steps", {
@@ -54,7 +178,8 @@ function CanvasInner({ vsId }: { vsId: string }) {
     orderBy: "sequence_index ASC",
   });
   const personas = useList<Persona>("personas", { where: { value_stream_id: vsId } });
-  const allData = useList<DataElement>("data_elements");
+  const allDataDefs = useList<DataElement>("data_elements", { where: { value_stream_id: vsId } });
+  const allSDEs = useList<StepDataElement>("step_data_elements");
   const allStepPersonas = useList<StepPersona>("step_personas");
   const constraints = useList<Constraint>("constraints", { where: { value_stream_id: vsId } });
   const edges = useList<FlowEdge>("flow_edges", { where: { value_stream_id: vsId } });
@@ -66,6 +191,21 @@ function CanvasInner({ vsId }: { vsId: string }) {
   const [addParent, setAddParent] = useState<string | null | undefined>(undefined); // undefined = closed
   const createEdge = useCreate<FlowEdge>("flow_edges");
   const deleteEdge = useSoftDelete("flow_edges");
+  const updateEdge = useUpdate<FlowEdge>("flow_edges");
+  const [edgeMenu, setEdgeMenu] = useState<{
+    id: string;
+    edgeType: EdgeType;
+    x: number;
+    y: number;
+  } | null>(null);
+  const [showEdgeInfo, setShowEdgeInfo] = useState(false);
+  const canvasWrapRef = useRef<HTMLDivElement>(null);
+  const [magnifier, setMagnifier] = useState<{
+    x: number;
+    y: number;
+    rect: DOMRect;
+    vp: Viewport;
+  } | null>(null);
 
   const allSteps = useMemo(() => steps.data ?? [], [steps.data]);
   const allStepIds = useMemo(() => new Set(allSteps.map((s) => s.id)), [allSteps]);
@@ -87,14 +227,48 @@ function CanvasInner({ vsId }: { vsId: string }) {
   };
   const onEdgesDelete = (deleted: Edge[]) => {
     for (const e of deleted) if (e.id.startsWith("fe-")) deleteEdge.mutate(e.id.slice(3));
+    setEdgeMenu(null);
+  };
+
+  // Lane-drag: when a deptBg frame is dragged, move all member nodes with it.
+  // We capture start positions once and compute absolute offset from there to
+  // avoid floating-point drift from delta-on-delta accumulation.
+  const dragOriginRef = useRef<{
+    laneId: string;
+    lanePos: { x: number; y: number };
+    members: Map<string, { x: number; y: number }>;
+  } | null>(null);
+
+  const onNodeDragStart = (_: unknown, node: Node) => {
+    if (node.type !== "deptBg") return;
+    const members = new Map<string, { x: number; y: number }>();
+    for (const n of nodes) {
+      if ((n.data as OilNodeData).laneId === node.id)
+        members.set(n.id, { x: n.position.x, y: n.position.y });
+    }
+    dragOriginRef.current = { laneId: node.id, lanePos: { x: node.position.x, y: node.position.y }, members };
+  };
+
+  const onNodeDrag = (_: unknown, node: Node) => {
+    const o = dragOriginRef.current;
+    if (!o || node.id !== o.laneId) return;
+    const dx = node.position.x - o.lanePos.x;
+    const dy = node.position.y - o.lanePos.y;
+    setNodes((nds) =>
+      nds.map((n) => {
+        const sp = o.members.get(n.id);
+        return sp ? { ...n, position: { x: sp.x + dx, y: sp.y + dy } } : n;
+      }),
+    );
   };
 
   const ready =
-    steps.data && personas.data && allData.data && allStepPersonas.data && constraints.data && edges.data;
+    steps.data && personas.data && allDataDefs.data && allSDEs.data && allStepPersonas.data && constraints.data && edges.data;
 
   useEffect(() => {
     if (!ready) return;
-    const dataElements = (allData.data ?? []).filter((d) => allStepIds.has(d.step_id));
+    const vsSDEs = (allSDEs.data ?? []).filter((sde) => allStepIds.has(sde.step_id));
+    const dataElements = linkDataElements(allDataDefs.data ?? [], vsSDEs);
     const stepPersonas = (allStepPersonas.data ?? []).filter((sp) => allStepIds.has(sp.step_id));
     const refit = () => setTimeout(() => fitView({ padding: 0.2, duration: 300 }), 50);
 
@@ -138,7 +312,27 @@ function CanvasInner({ vsId }: { vsId: string }) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, allSteps, personas.data, allData.data, allStepPersonas.data, constraints.data, edges.data, layoutMode, layers, expandedSet]);
+  }, [ready, allSteps, personas.data, allDataDefs.data, allSDEs.data, allStepPersonas.data, constraints.data, edges.data, layoutMode, layers, expandedSet]);
+
+  // Magnifier: show lens while Alt is held and mouse is over the canvas.
+  useEffect(() => {
+    const el = canvasWrapRef.current;
+    if (!el) return;
+    const onMove = (e: MouseEvent) => {
+      if (!e.altKey) { setMagnifier(null); return; }
+      setMagnifier({ x: e.clientX, y: e.clientY, rect: el.getBoundingClientRect(), vp: getViewport() });
+    };
+    const onKeyUp = (e: KeyboardEvent) => { if (e.key === "Alt") setMagnifier(null); };
+    const onLeave = () => setMagnifier(null);
+    el.addEventListener("mousemove", onMove);
+    el.addEventListener("mouseleave", onLeave);
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      el.removeEventListener("mousemove", onMove);
+      el.removeEventListener("mouseleave", onLeave);
+      window.removeEventListener("keyup", onKeyUp);
+    };
+  }, [getViewport]);
 
   return (
     <div className="flex h-full">
@@ -161,7 +355,7 @@ function CanvasInner({ vsId }: { vsId: string }) {
           </Button>
         </div>
 
-        <div className="relative min-w-0 flex-1">
+        <div ref={canvasWrapRef} className="relative min-w-0 flex-1">
           <div className="absolute left-3 top-3 z-10 flex flex-col gap-2">
             <div className="flex gap-1 rounded-md border border-border bg-surface/90 p-1 backdrop-blur">
               {LAYOUT_MODES.map((m) => (
@@ -191,12 +385,12 @@ function CanvasInner({ vsId }: { vsId: string }) {
                 ))}
               </div>
             )}
-            <div className="flex items-center gap-1.5 rounded-md border border-border bg-surface/90 p-1 text-[11px] text-muted-foreground backdrop-blur">
-              <span className="pl-1">Drag to link · new edge:</span>
+            <div className="relative flex items-center gap-1.5 rounded-md border border-border bg-surface/90 px-2 py-1.5 text-[11px] text-muted-foreground backdrop-blur">
+              <span className="shrink-0">Drag to link · new edge:</span>
               <Select
                 value={newEdgeType}
                 onChange={(e) => setNewEdgeType(e.target.value as EdgeType)}
-                className="h-7 w-32"
+                className="h-9 w-44"
               >
                 {EDGE_TYPES.map((t) => (
                   <option key={t} value={t}>
@@ -204,6 +398,26 @@ function CanvasInner({ vsId }: { vsId: string }) {
                   </option>
                 ))}
               </Select>
+              <button
+                onClick={(e) => { e.stopPropagation(); setShowEdgeInfo((v) => !v); }}
+                className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full hover:bg-muted"
+                title="Edge type guide"
+              >
+                <Info size={12} />
+              </button>
+              {showEdgeInfo && (
+                <div className="absolute left-0 top-full z-50 mt-1 w-72 rounded-md border border-border bg-surface p-3 shadow-lg leading-relaxed">
+                  <p className="mb-2 font-semibold text-foreground">Edge types</p>
+                  <div className="space-y-2 text-muted-foreground">
+                    {EDGE_TYPE_INFO.map(({ type, color, label, desc }) => (
+                      <div key={type} className="flex gap-2">
+                        <span className="mt-1 h-2 w-2 shrink-0 rounded-full" style={{ background: color }} />
+                        <span><span className="font-medium text-foreground">{label}</span> — {desc}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
             {layoutMode === "full" && (
               <div className="rounded-md border border-border bg-surface/90 px-2 py-1 text-[11px] text-muted-foreground backdrop-blur">
@@ -219,8 +433,21 @@ function CanvasInner({ vsId }: { vsId: string }) {
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
             onEdgesDelete={onEdgesDelete}
+            onNodeDragStart={onNodeDragStart}
+            onNodeDrag={onNodeDrag}
+            onEdgeClick={(evt, edge) => {
+              if (!edge.id.startsWith("fe-")) return;
+              const feId = edge.id.slice(3);
+              const fe = edges.data?.find((e) => e.id === feId);
+              if (!fe) return;
+              setEdgeMenu({ id: feId, edgeType: fe.edge_type, x: evt.clientX, y: evt.clientY });
+              // Highlight the two connected nodes so the user knows which steps this edge links.
+              setNodes((nds) => nds.map((n) => ({ ...n, selected: n.id === edge.source || n.id === edge.target })));
+            }}
             nodeTypes={nodeTypes}
+            edgeTypes={edgeTypes}
             onNodeClick={(_, n) => {
+              setEdgeMenu(null);
               if (n.type === "deptBg") return;
               setSelected(n.data as OilNodeData);
             }}
@@ -229,7 +456,7 @@ function CanvasInner({ vsId }: { vsId: string }) {
               if (data.nodeKind === "step" && data.entityId && data.subStepCount)
                 toggleExpand(data.entityId);
             }}
-            onPaneClick={() => setSelected(null)}
+            onPaneClick={() => { setSelected(null); setEdgeMenu(null); setShowEdgeInfo(false); }}
             fitView
             zoomOnDoubleClick={false}
             minZoom={0.15}
@@ -272,6 +499,56 @@ function CanvasInner({ vsId }: { vsId: string }) {
         fields={processStepFields}
         extra={{ value_stream_id: vsId, parent_step_id: addParent ?? null }}
       />
+
+      {edgeMenu && (
+        <div
+          className="fixed z-50 min-w-[220px] rounded-md border border-border bg-surface p-3 shadow-lg"
+          style={{ left: edgeMenu.x + 8, top: edgeMenu.y - 10 }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <p className="mb-3 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+            Flow edge
+          </p>
+          <div className="space-y-3">
+            <Select
+              value={edgeMenu.edgeType}
+              onChange={(e) => {
+                const newType = e.target.value as EdgeType;
+                updateEdge.mutate({ id: edgeMenu.id, data: { edge_type: newType } });
+                setEdgeMenu((m) => m && { ...m, edgeType: newType });
+              }}
+              className="h-9"
+            >
+              {EDGE_TYPES.map((t) => (
+                <option key={t} value={t}>{titleCase(t)}</option>
+              ))}
+            </Select>
+            <Button
+              size="md"
+              variant="danger"
+              className="w-full"
+              onClick={() => {
+                deleteEdge.mutate(edgeMenu.id);
+                setEdgeMenu(null);
+                setNodes((nds) => nds.map((n) => ({ ...n, selected: false })));
+              }}
+            >
+              Remove edge
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {magnifier && (
+        <MagnifierLens
+          nodes={nodes}
+          edges={rfEdges}
+          mouseX={magnifier.x}
+          mouseY={magnifier.y}
+          canvasRect={magnifier.rect}
+          parentVp={magnifier.vp}
+        />
+      )}
     </div>
   );
 }

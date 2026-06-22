@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { scoreConstraintCandidates, type ScoringInput } from "@shared/scoring";
+import type { LinkedDataElement } from "@shared/gaps";
 import type {
   Constraint,
-  DataElement,
   FlowEdge,
   ProcessStep,
   StepPersona,
@@ -32,15 +32,18 @@ function step(id: string, name = "step", extra: Partial<ProcessStep> = {}): Proc
     ...extra,
   };
 }
-function dataEl(id: string, step_id: string, extra: Partial<DataElement> = {}): DataElement {
+function dataEl(id: string, step_id: string, extra: Partial<LinkedDataElement> = {}): LinkedDataElement {
   return {
     ...base,
     id,
     step_id,
+    data_element_id: `de-${id}`,
+    value_stream_id: "vs",
     name: "d",
     business_description: null,
     binding_point: "entry",
     data_type: null,
+    length: null,
     source_system: null,
     table_or_view: null,
     field_name: null,

@@ -1,7 +1,7 @@
 import type { Edge, Node } from "@xyflow/react";
+import type { LinkedDataElement } from "@shared/gaps";
 import type {
   Constraint,
-  DataElement,
   FlowEdge,
   Persona,
   ProcessStep,
@@ -25,7 +25,7 @@ export interface OilNodeData extends Record<string, unknown> {
   constraint?: ConstraintBadge;
   step?: ProcessStep;
   persona?: Persona;
-  data?: DataElement;
+  data?: LinkedDataElement;
   // Attached-cell layout extras
   roleOnStep?: string;
   deptColor?: string;
@@ -36,6 +36,8 @@ export interface OilNodeData extends Record<string, unknown> {
   subStepCount?: number;
   isExpanded?: boolean;
   depth?: number;
+  // Lane membership: which domain frame owns this node (for group drag in Full Model mode).
+  laneId?: string;
 }
 
 export const NODE_SIZES: Record<FlowNodeType, { width: number; height: number }> = {
@@ -49,7 +51,7 @@ const nid = (t: FlowNodeType, id: string) => `${t}:${id}`;
 export interface GraphInput {
   steps: ProcessStep[];
   personas: Persona[];
-  dataElements: DataElement[];
+  dataElements: LinkedDataElement[];
   stepPersonas: StepPersona[];
   constraints: Constraint[];
   edges: FlowEdge[];
@@ -211,6 +213,22 @@ export function buildGraph(input: GraphInput): { nodes: Node<OilNodeData>[]; edg
   if (showPersonas) {
     for (const sp of stepPersonas) {
       pushEdge(`sp-${sp.id}`, nid("persona", sp.persona_id), nid("step", sp.step_id), "handoff");
+    }
+  }
+
+  // Detect parallel edges (multiple edges between same source+target) and assign
+  // an index so the custom edge renderer can arc them through different Y positions.
+  const pairCount = new Map<string, number>();
+  const pairIdx = new Map<string, number>();
+  for (const e of outEdges) pairCount.set(`${e.source}|${e.target}`, (pairCount.get(`${e.source}|${e.target}`) ?? 0) + 1);
+  for (const e of outEdges) {
+    const key = `${e.source}|${e.target}`;
+    const total = pairCount.get(key) ?? 1;
+    if (total > 1) {
+      const idx = pairIdx.get(key) ?? 0;
+      pairIdx.set(key, idx + 1);
+      e.type = "parallel";
+      e.data = { parallelIndex: idx, parallelTotal: total };
     }
   }
 

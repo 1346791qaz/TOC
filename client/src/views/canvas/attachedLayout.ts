@@ -1,7 +1,7 @@
 import type { Edge, Node } from "@xyflow/react";
+import type { LinkedDataElement } from "@shared/gaps";
 import type {
   Constraint,
-  DataElement,
   FlowEdge,
   Persona,
   ProcessStep,
@@ -36,6 +36,8 @@ const LANE_HEADER = 28;
 const BINDING_ORDER: Record<string, number> = { entry: 0, action: 1, exit: 2 };
 const ROLE_ORDER: Record<string, number> = { executor: 0, approver: 1, consulted: 2, informed: 3 };
 const UNOWNED = "Unowned";
+const PARALLEL_GAP = 20; // vertical gap between stacked parallel steps (sub-step bands)
+const FRAME_GAP = 8; // min clearance between consecutive parallel top-level frames
 
 const EDGE_STYLE: Record<string, { dash?: string; color: string }> = {
   sequence: { color: "hsl(215 20% 45%)" },
@@ -74,7 +76,7 @@ const GRAY: DomainColor = {
 export interface AttachedInput {
   steps: ProcessStep[];
   personas: Persona[];
-  dataElements: DataElement[];
+  dataElements: LinkedDataElement[];
   stepPersonas: StepPersona[];
   constraints: Constraint[];
   edges: FlowEdge[];
@@ -124,14 +126,62 @@ export function buildAttachedGraph(input: AttachedInput): {
   const cellNodes: Node<OilNodeData>[] = [];
   const placed = new Set<string>();
 
+  // Emit merged domain frames for a set of sub-columns (consecutive same-domain
+  // groups get merged into one frame). Used for both top-level lanes and sub-step bands.
+  function emitLanes(
+    subCols: { firstStep: ProcessStep; x: number; width: number; bandY: number; bottom: number; ownerDomain: string; ownerColor: DomainColor }[],
+    zIndex: number,
+  ) {
+    let i = 0;
+    while (i < subCols.length) {
+      const dom = subCols[i].ownerDomain;
+      let e = i;
+      while (e + 1 < subCols.length && subCols[e + 1].ownerDomain === dom) e++;
+      const run = subCols.slice(i, e + 1);
+      const left = run[0].x - DOMAIN_PAD;
+      const right = run[run.length - 1].x + run[run.length - 1].width - (COLUMN_WIDTH - STEP_W) + DOMAIN_PAD;
+      const bandY = run[0].bandY;
+      const maxBottom = Math.max(...run.map((c) => c.bottom));
+      const color = run[0].ownerColor;
+      laneNodes.push({
+        id: `lane:${run[0].firstStep.id}`,
+        type: "deptBg",
+        position: { x: left, y: bandY - LANE_HEADER },
+        style: {
+          width: Math.max(STEP_W + DOMAIN_PAD * 2, right - left),
+          height: maxBottom - bandY + DOMAIN_PAD + LANE_HEADER,
+          pointerEvents: "none",
+        },
+        selectable: false,
+        draggable: true,
+        dragHandle: ".lane-header",
+        zIndex,
+        data: {
+          label: dom,
+          nodeKind: "step",
+          entityId: "",
+          dimmed: false,
+          isBackground: true,
+          deptColor: color.border,
+          deptBg: color.bg,
+        },
+      });
+      i = e + 1;
+    }
+  }
+
   // Lay out a step at (x, y); if expanded, its sub-steps form a left-to-right
-  // band beneath it. Returns the slot width consumed and the bottom Y reached.
+  // band beneath it. Returns:
+  //   width    — slot width consumed (for spacing subsequent columns)
+  //   bottom   — total bottom including sub-step band (for spacing parallel steps)
+  //   ownBottom — bottom of this step's OWN content only (for sizing this step's domain frame)
   function layoutStep(
     step: ProcessStep,
     x: number,
     y: number,
     depth: number,
-  ): { width: number; bottom: number } {
+    laneId: string,
+  ): { width: number; bottom: number; ownBottom: number } {
     placed.add(step.id);
     const kids = childrenOf.get(step.id) ?? [];
     const isOpen = expanded.has(step.id) && kids.length > 0;
@@ -152,6 +202,7 @@ export function buildAttachedGraph(input: AttachedInput): {
         isExpanded: expanded.has(step.id),
         depth,
         deptColor: colorFor(ownerDomainOf(step)).border,
+        laneId,
       },
     });
 
@@ -184,6 +235,7 @@ export function buildAttachedGraph(input: AttachedInput): {
             roleOnStep: sp.role_on_step,
             deptColor: colorFor(domainOf(p)).border,
             isExecutor: sp.role_on_step === "executor",
+            laneId,
           },
         });
         cursorY += PERSONA_H + CELL_GAP;
@@ -205,80 +257,200 @@ export function buildAttachedGraph(input: AttachedInput): {
           type: "dataCell",
           position: { x: cellX, y: cursorY },
           zIndex: 2,
-          data: { label: d.name, nodeKind: "data_element", entityId: d.id, dimmed: false, data: d },
+          data: { label: d.name, nodeKind: "data_element", entityId: d.id, dimmed: false, data: d, laneId },
         });
         cursorY += DATA_H + CELL_GAP;
       }
     }
 
     const cellsBottom = cursorY;
-    if (!isOpen) return { width: COLUMN_WIDTH, bottom: cellsBottom };
+    if (!isOpen) return { width: COLUMN_WIDTH, bottom: cellsBottom, ownBottom: cellsBottom };
 
-    // Sub-steps: left-to-right band directly below this step's cells.
+    // Sub-steps: group by sequence_index so same-index sub-steps stack vertically
+    // (parallel within the parent), different indexes go left-to-right (serial).
+    const subSeqMap = new Map<number, ProcessStep[]>();
+    for (const k of kids) {
+      const g = subSeqMap.get(k.sequence_index) ?? [];
+      g.push(k);
+      subSeqMap.set(k.sequence_index, g);
+    }
+    const subGroups = [...subSeqMap.entries()]
+      .sort(([a], [b]) => a - b)
+      .map(([, grp]) => grp);
+
     const bandY = cellsBottom + BAND_GAP;
     let childX = x;
     let maxBottom = bandY;
-    for (const child of kids) {
-      const res = layoutStep(child, childX, bandY, depth + 1);
-      childX += res.width;
-      maxBottom = Math.max(maxBottom, res.bottom);
+
+    // Track sub-column metadata so we can emit correct domain frames per sub-step.
+    const subCols: { firstStep: ProcessStep; x: number; width: number; bandY: number; bottom: number; ownerDomain: string; ownerColor: DomainColor }[] = [];
+
+    for (const subGroup of subGroups) {
+      let subY = bandY;
+      let groupW = COLUMN_WIDTH;
+      let groupBottom = bandY;
+      for (const child of subGroup) {
+        const res = layoutStep(child, childX, subY, depth + 1, `lane:${child.id}`);
+        subY = res.bottom + PARALLEL_GAP;
+        groupW = Math.max(groupW, res.width);
+        groupBottom = Math.max(groupBottom, res.bottom);
+        maxBottom = Math.max(maxBottom, res.bottom);
+      }
+      subCols.push({
+        firstStep: subGroup[0],
+        x: childX,
+        width: groupW,
+        bandY,
+        bottom: groupBottom,
+        ownerDomain: ownerDomainOf(subGroup[0]),
+        ownerColor: colorFor(ownerDomainOf(subGroup[0])),
+      });
+      childX += groupW;
     }
+
+    // Emit domain frames for the sub-step band, merged by consecutive same domain.
+    emitLanes(subCols, depth + 1);
+
     const width = Math.max(COLUMN_WIDTH, childX - x);
-    return { width, bottom: maxBottom };
+    return { width, bottom: maxBottom, ownBottom: cellsBottom };
   }
 
+  // Group top-level steps by sequence_index. Same index = run in parallel (stack
+  // vertically in the same column). Different indexes = serial (left to right).
   const sortedTop = steps
     .filter((s) => !s.parent_step_id)
-    .sort((a, b) => a.sequence_index - b.sequence_index);
+    .sort((a, b) => a.sequence_index - b.sequence_index || a.created_at.localeCompare(b.created_at));
 
-  interface Meta {
+  const seqMap = new Map<number, ProcessStep[]>();
+  for (const s of sortedTop) {
+    const g = seqMap.get(s.sequence_index) ?? [];
+    g.push(s);
+    seqMap.set(s.sequence_index, g);
+  }
+
+  // One entry per top-level step. Parallel steps (same sequence_index group)
+  // are flagged isParallel=true and always get their own isolated frame.
+  // Single-step columns (isParallel=false) may merge horizontally when
+  // consecutive neighbours share the same domain.
+  interface StepFrame {
     step: ProcessStep;
     x: number;
-    width: number;
-    bottom: number;
+    colWidth: number;
+    top: number;
+    ownBottom: number;
     ownerDomain: string;
     ownerColor: DomainColor;
+    isParallel: boolean;
   }
-  const meta: Meta[] = [];
+  const stepFrames: StepFrame[] = [];
+
   let runningX = 0;
-  for (const step of sortedTop) {
-    const res = layoutStep(step, runningX, 0, 0);
-    const ownerDomain = ownerDomainOf(step);
-    meta.push({ step, x: runningX, width: res.width, bottom: res.bottom, ownerDomain, ownerColor: colorFor(ownerDomain) });
-    runningX += res.width;
+  for (const group of seqMap.values()) {
+    const isParallel = group.length > 1;
+    let cursorY = 0;
+    let groupWidth = COLUMN_WIDTH;
+
+    for (const step of group) {
+      const stepTop = cursorY;
+      const laneId = `lane:${step.id}`;
+      const res = layoutStep(step, runningX, cursorY, 0, laneId);
+      groupWidth = Math.max(groupWidth, res.width);
+      stepFrames.push({
+        step,
+        x: runningX,
+        colWidth: groupWidth,
+        top: stepTop,
+        ownBottom: res.ownBottom,
+        ownerDomain: ownerDomainOf(step),
+        ownerColor: colorFor(ownerDomainOf(step)),
+        isParallel,
+      });
+      // For parallel groups, ensure enough vertical room so the next frame's
+      // header clears the bottom padding of this frame: LANE_HEADER + DOMAIN_PAD + FRAME_GAP.
+      const rowGap = isParallel ? LANE_HEADER + DOMAIN_PAD + FRAME_GAP : PARALLEL_GAP;
+      cursorY = res.bottom + rowGap;
+    }
+
+    // Back-fill colWidth now that we know the final groupWidth.
+    for (let fi = stepFrames.length - group.length; fi < stepFrames.length; fi++) {
+      stepFrames[fi].colWidth = groupWidth;
+    }
+
+    runningX += groupWidth;
   }
 
-  // Merge consecutive same-domain top slots into one labeled lane.
-  let r = 0;
-  while (r < meta.length) {
-    const dom = meta[r].ownerDomain;
-    let e = r;
-    while (e + 1 < meta.length && meta[e + 1].ownerDomain === dom) e++;
-    const run = meta.slice(r, e + 1);
-    const left = run[0].x - DOMAIN_PAD;
-    const right = run[run.length - 1].x + run[run.length - 1].width - (COLUMN_WIDTH - STEP_W) + DOMAIN_PAD;
-    const top = -LANE_HEADER;
-    const maxBottom = Math.max(...run.map((m) => m.bottom));
-    const color = run[0].ownerColor;
-    laneNodes.push({
-      id: `lane:${run[0].step.id}`,
-      type: "deptBg",
-      position: { x: left, y: top },
-      style: { width: Math.max(STEP_W + DOMAIN_PAD * 2, right - left), height: maxBottom + DOMAIN_PAD - top },
-      selectable: false,
-      draggable: false,
-      zIndex: 0,
-      data: {
-        label: dom,
-        nodeKind: "step",
-        entityId: "",
-        dimmed: false,
-        isBackground: true,
-        deptColor: color.border,
-        deptBg: color.bg,
-      },
-    });
-    r = e + 1;
+  // Emit top-level domain frames. Parallel steps always get their own frame.
+  // Single-step columns merge with consecutive neighbours that share the same domain.
+  {
+    let i = 0;
+    while (i < stepFrames.length) {
+      const sf = stepFrames[i];
+      if (sf.isParallel) {
+        // Isolated frame for this one step only, anchored to this step's Y range.
+        const left = sf.x - DOMAIN_PAD;
+        const right = sf.x + sf.colWidth - (COLUMN_WIDTH - STEP_W) + DOMAIN_PAD;
+        const color = sf.ownerColor;
+        laneNodes.push({
+          id: `lane:${sf.step.id}`,
+          type: "deptBg",
+          position: { x: left, y: sf.top - LANE_HEADER },
+          style: {
+            width: Math.max(STEP_W + DOMAIN_PAD * 2, right - left),
+            height: sf.ownBottom - sf.top + DOMAIN_PAD + LANE_HEADER,
+            pointerEvents: "none",
+          },
+          selectable: false,
+          draggable: true,
+          dragHandle: ".lane-header",
+          zIndex: 0,
+          data: {
+            label: sf.ownerDomain,
+            nodeKind: "step",
+            entityId: "",
+            dimmed: false,
+            isBackground: true,
+            deptColor: color.border,
+            deptBg: color.bg,
+          },
+        });
+        i++;
+      } else {
+        // Merge consecutive single-step columns with the same domain.
+        const dom = sf.ownerDomain;
+        let e = i;
+        while (e + 1 < stepFrames.length && !stepFrames[e + 1].isParallel && stepFrames[e + 1].ownerDomain === dom) e++;
+        const run = stepFrames.slice(i, e + 1);
+        const left = run[0].x - DOMAIN_PAD;
+        const lastSf = run[run.length - 1];
+        const right = lastSf.x + lastSf.colWidth - (COLUMN_WIDTH - STEP_W) + DOMAIN_PAD;
+        const maxBottom = Math.max(...run.map((f) => f.ownBottom));
+        const color = run[0].ownerColor;
+        laneNodes.push({
+          id: `lane:${run[0].step.id}`,
+          type: "deptBg",
+          position: { x: left, y: -LANE_HEADER },
+          style: {
+            width: Math.max(STEP_W + DOMAIN_PAD * 2, right - left),
+            height: maxBottom + DOMAIN_PAD + LANE_HEADER,
+            pointerEvents: "none",
+          },
+          selectable: false,
+          draggable: true,
+          dragHandle: ".lane-header",
+          zIndex: 0,
+          data: {
+            label: dom,
+            nodeKind: "step",
+            entityId: "",
+            dimmed: false,
+            isBackground: true,
+            deptColor: color.border,
+            deptBg: color.bg,
+          },
+        });
+        i = e + 1;
+      }
+    }
   }
 
   // Edges between any two currently-visible steps: the top-level spine plus the
@@ -296,6 +468,21 @@ export function buildAttachedGraph(input: AttachedInput): {
       animated: ed.edge_type === "sequence",
       style: { stroke: style.color, strokeWidth: 1.5, strokeDasharray: style.dash },
     });
+  }
+
+  // Detect parallel edges and assign per-pair indices for arc separation.
+  const pairCount = new Map<string, number>();
+  const pairIdx = new Map<string, number>();
+  for (const e of outEdges) pairCount.set(`${e.source}|${e.target}`, (pairCount.get(`${e.source}|${e.target}`) ?? 0) + 1);
+  for (const e of outEdges) {
+    const key = `${e.source}|${e.target}`;
+    const total = pairCount.get(key) ?? 1;
+    if (total > 1) {
+      const idx = pairIdx.get(key) ?? 0;
+      pairIdx.set(key, idx + 1);
+      e.type = "parallel";
+      e.data = { parallelIndex: idx, parallelTotal: total };
+    }
   }
 
   return { nodes: [...laneNodes, ...cellNodes], edges: outEdges };

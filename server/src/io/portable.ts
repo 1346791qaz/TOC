@@ -17,6 +17,7 @@ const IMPORT_ORDER: EntityKey[] = [
   "metrics",
   "step_personas",
   "data_elements",
+  "step_data_elements",
   "constraints",
   "flow_edges",
 ];
@@ -62,7 +63,7 @@ export function exportEngagement(engagementId: string): PortableBundle {
 
   const stepIds: string[] = [];
   for (const vsId of vsIds) {
-    for (const key of ["assumptions", "metrics", "personas", "process_steps", "constraints", "flow_edges"] as EntityKey[]) {
+    for (const key of ["assumptions", "metrics", "personas", "process_steps", "constraints", "flow_edges", "data_elements"] as EntityKey[]) {
       const rows = listEvery(key, { value_stream_id: vsId });
       data[key].push(...rows);
       if (key === "process_steps") stepIds.push(...rows.map((r) => r.id as string));
@@ -71,7 +72,7 @@ export function exportEngagement(engagementId: string): PortableBundle {
 
   for (const stepId of stepIds) {
     data.step_personas.push(...listEvery("step_personas", { step_id: stepId }));
-    data.data_elements.push(...listEvery("data_elements", { step_id: stepId }));
+    data.step_data_elements.push(...listEvery("step_data_elements", { step_id: stepId }));
   }
 
   return {

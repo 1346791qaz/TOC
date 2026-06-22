@@ -1,7 +1,12 @@
 import { Router } from "express";
 import { ZodError } from "zod";
 import { exportEngagement, importEngagement } from "../io/portable";
-import { importStructured, structuredImportRequestSchema } from "../io/structuredImport";
+import {
+  importStructured,
+  previewImport,
+  previewRequestSchema,
+  structuredImportRequestSchema,
+} from "../io/structuredImport";
 
 export function ioRouter(): Router {
   const router = Router();
@@ -33,11 +38,25 @@ export function ioRouter(): Router {
     }
   });
 
-  // Structured CSV/JSON import for steps, personas, and data elements.
+  // Similarity scan — returns conflicts without writing anything.
+  router.post("/import-structured/preview", (req, res) => {
+    try {
+      const { value_stream_id, kind, rows } = previewRequestSchema.parse(req.body);
+      res.json(previewImport(value_stream_id, kind, rows));
+    } catch (err) {
+      if (err instanceof ZodError) {
+        res.status(400).json({ error: "validation_error", issues: err.issues });
+        return;
+      }
+      res.status(400).json({ error: "preview_failed", message: (err as Error).message });
+    }
+  });
+
+  // Structured CSV/JSON import — accepts optional per-row resolutions for conflicts.
   router.post("/import-structured", (req, res) => {
     try {
-      const { value_stream_id, kind, rows } = structuredImportRequestSchema.parse(req.body);
-      res.json(importStructured(value_stream_id, kind, rows));
+      const { value_stream_id, kind, rows, resolutions } = structuredImportRequestSchema.parse(req.body);
+      res.json(importStructured(value_stream_id, kind, rows, resolutions));
     } catch (err) {
       if (err instanceof ZodError) {
         res.status(400).json({ error: "validation_error", issues: err.issues });

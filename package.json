@@ -1,9 +1,9 @@
 {
-  "name": "oil-constraint-mapper",
+  "name": "value-stream-model-engine",
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Operational Intelligence Layer (OIL) Constraint Mapper — a local-first Theory of Constraints analysis console.",
+  "description": "Value Stream Model Engine (VSME) — a local-first Theory of Constraints analysis console by Nexum Solutions.",
   "scripts": {
     "dev": "concurrently -k -n server,client -c blue,magenta \"npm:dev:server\" \"npm:dev:client\"",
     "dev:server": "tsx watch server/src/index.ts",
@@ -11,11 +11,13 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "migrate": "tsx server/src/db/migrate.ts",
+    "clear-agreements": "tsx server/src/db/clear-agreements.ts",
     "seed": "tsx server/src/db/seed.ts",
     "typecheck": "tsc -b --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "start": "tsx server/src/index.ts"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.59.0",
@@ -31,6 +33,7 @@
     "react-dom": "^18.3.1",
     "tailwind-merge": "^2.5.4",
     "uuid": "^11.0.3",
+    "tsx": "^4.19.2",
     "zod": "^3.23.8",
     "zustand": "^5.0.1"
   },
@@ -49,7 +52,6 @@
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.15",
     "tailwindcss-animate": "^1.0.7",
-    "tsx": "^4.19.2",
     "typescript": "^5.6.3",
     "vite": "^5.4.11",
     "vitest": "^2.1.5"

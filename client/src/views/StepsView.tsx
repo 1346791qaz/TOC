@@ -1,9 +1,11 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ArrowRight, Database, Layers, Pencil, Plus, X } from "lucide-react";
-import type { DataElement, Persona, ProcessStep, StepPersona, ValueStream } from "@shared/schemas";
+import type { LinkedDataElement } from "@shared/gaps";
+import type { DataElement, Persona, ProcessStep, StepDataElement, StepPersona, ValueStream } from "@shared/schemas";
+import { linkDataElements } from "@shared/gaps";
 import { RACI_ROLES } from "@shared/enums";
 import { useCreate, useList, useSoftDelete } from "@/lib/queries";
-import { dataElementFields, processStepFields } from "@/lib/entityConfig";
+import { processStepFields } from "@/lib/entityConfig";
 import { useUi } from "@/store";
 import { fmtNum } from "@/lib/utils";
 import { presenceTone, titleCase } from "@/lib/display";
@@ -12,6 +14,7 @@ import { ViewShell, EmptyHint } from "@/components/ViewShell";
 import { StepBreadcrumb } from "@/components/StepBreadcrumb";
 import { Badge, Button, Card, Select } from "@/components/ui/primitives";
 import { EntityModalForm } from "@/components/EntityModalForm";
+import { DataElementModal } from "@/components/DataElementModal";
 
 export function StepsView({ vsId }: { vsId: string }) {
   const { stepPath, setStepPath } = useUi();
@@ -20,6 +23,10 @@ export function StepsView({ vsId }: { vsId: string }) {
     where: { value_stream_id: vsId },
     orderBy: "sequence_index ASC",
   });
+  const dataElementDefs = useList<DataElement>("data_elements", {
+    where: { value_stream_id: vsId },
+  });
+  const allSDEs = useList<StepDataElement>("step_data_elements");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editing, setEditing] = useState<ProcessStep | null>(null);
   const [creating, setCreating] = useState(false);
@@ -35,6 +42,12 @@ export function StepsView({ vsId }: { vsId: string }) {
     setStepPath(buildStepPath(stepId, allSteps));
     setSelectedId(null);
   };
+
+  const linkedElements = useMemo(() => {
+    const allStepIds = new Set(allSteps.map((s) => s.id));
+    const vsSDEs = (allSDEs.data ?? []).filter((sde) => allStepIds.has(sde.step_id));
+    return linkDataElements(dataElementDefs.data ?? [], vsSDEs);
+  }, [dataElementDefs.data, allSDEs.data, allSteps]);
 
   return (
     <ViewShell
@@ -98,6 +111,8 @@ export function StepsView({ vsId }: { vsId: string }) {
               step={selected}
               vsId={vsId}
               allSteps={allSteps}
+              linkedElements={linkedElements}
+              availableDefs={dataElementDefs.data ?? []}
               onEdit={() => setEditing(selected)}
               onDrill={() => drillInto(selected.id)}
               onDrillChild={(childId) => drillInto(childId)}
@@ -151,6 +166,8 @@ function StepDetail({
   step,
   vsId,
   allSteps,
+  linkedElements,
+  availableDefs,
   onEdit,
   onDrill,
   onDrillChild,
@@ -159,6 +176,8 @@ function StepDetail({
   step: ProcessStep;
   vsId: string;
   allSteps: ProcessStep[];
+  linkedElements: LinkedDataElement[];
+  availableDefs: DataElement[];
   onEdit: () => void;
   onDrill: () => void;
   onDrillChild: (childId: string) => void;
@@ -200,7 +219,7 @@ function StepDetail({
 
       <DataLandscape step={step} />
       <StepPersonas step={step} vsId={vsId} />
-      <StepData step={step} />
+      <StepData step={step} vsId={vsId} linkedElements={linkedElements.filter((d) => d.step_id === step.id)} availableDefs={availableDefs} />
       <StepSubSteps step={step} vsId={vsId} allSteps={allSteps} onDrill={onDrill} onDrillChild={onDrillChild} />
     </div>
   );
@@ -374,11 +393,25 @@ function StepPersonas({ step, vsId }: { step: ProcessStep; vsId: string }) {
   );
 }
 
-function StepData({ step }: { step: ProcessStep }) {
-  const data = useList<DataElement>("data_elements", { where: { step_id: step.id } });
-  const del = useSoftDelete("data_elements");
+function StepData({
+  step,
+  vsId,
+  linkedElements,
+  availableDefs,
+}: {
+  step: ProcessStep;
+  vsId: string;
+  linkedElements: LinkedDataElement[];
+  availableDefs: DataElement[];
+}) {
+  const del = useSoftDelete("step_data_elements");
   const [creating, setCreating] = useState(false);
-  const [editing, setEditing] = useState<DataElement | null>(null);
+  const [editing, setEditing] = useState<LinkedDataElement | null>(null);
+
+  const alreadyBoundIds = useMemo(
+    () => new Set(linkedElements.map((d) => d.data_element_id)),
+    [linkedElements],
+  );
 
   return (
     <Card>
@@ -391,7 +424,7 @@ function StepData({ step }: { step: ProcessStep }) {
         </Button>
       </div>
       <div className="space-y-1">
-        {(data.data ?? []).map((d) => (
+        {linkedElements.map((d) => (
           <div key={d.id} className="flex items-center gap-2 rounded bg-muted/40 px-2 py-1 text-sm">
             <Badge>{d.binding_point}</Badge>
             <span className="font-medium">{d.name}</span>
@@ -407,26 +440,28 @@ function StepData({ step }: { step: ProcessStep }) {
             </span>
           </div>
         ))}
-        {(data.data ?? []).length === 0 && (
+        {linkedElements.length === 0 && (
           <p className="text-xs text-muted-foreground">No data bound to this step.</p>
         )}
       </div>
 
-      <EntityModalForm
-        open={creating}
-        onClose={() => setCreating(false)}
-        entityKey="data_elements"
-        title="Bind Data Element"
-        fields={dataElementFields.filter((f) => f.name !== "step_id")}
-        extra={{ step_id: step.id }}
-      />
+      {creating && (
+        <DataElementModal
+          open
+          onClose={() => setCreating(false)}
+          vsId={vsId}
+          stepId={step.id}
+          availableDefs={availableDefs}
+          alreadyBoundIds={alreadyBoundIds}
+        />
+      )}
       {editing && (
-        <EntityModalForm
+        <DataElementModal
           open
           onClose={() => setEditing(null)}
-          entityKey="data_elements"
-          title="Edit Data Element"
-          fields={dataElementFields.filter((f) => f.name !== "step_id")}
+          vsId={vsId}
+          stepId={step.id}
+          availableDefs={availableDefs}
           initial={editing}
         />
       )}

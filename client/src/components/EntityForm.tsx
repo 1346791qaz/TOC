@@ -1,7 +1,9 @@
 import { useState } from "react";
 import type { FieldDef } from "@/lib/entityConfig";
+import { resolveTypeOptions } from "@/lib/entityConfig";
 import { titleCase } from "@/lib/display";
 import { Field, Input, Select, Textarea } from "@/components/ui/primitives";
+import { Combobox } from "@/components/ui/Combobox";
 
 export interface DynamicOption {
   value: string;
@@ -23,7 +25,7 @@ function coerce(field: FieldDef, raw: string | boolean): unknown {
     const s = String(raw);
     return s === "" ? undefined : s;
   }
-  // text / textarea
+  // text / textarea / combobox
   const s = String(raw);
   if (s.trim() === "") return field.required ? "" : null;
   return s;
@@ -45,6 +47,7 @@ export function EntityForm({
   const [values, setValues] = useState<Values>(() => {
     const v: Values = {};
     for (const f of fields) {
+      if (f.type === "section") continue;
       const init = initial?.[f.name];
       if (f.type === "boolean") v[f.name] = Boolean(init);
       // Selects default to their first option so the state matches what the
@@ -69,7 +72,10 @@ export function EntityForm({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const out: Values = {};
-    for (const f of fields) out[f.name] = coerce(f, values[f.name] as string | boolean);
+    for (const f of fields) {
+      if (f.type === "section") continue;
+      out[f.name] = coerce(f, values[f.name] as string | boolean);
+    }
     onSubmit(out);
   };
 
@@ -77,6 +83,16 @@ export function EntityForm({
     <form id={formId} onSubmit={handleSubmit} className="grid grid-cols-2 gap-3">
       {fields.map((f) => {
         const span = f.full ? "col-span-2" : "col-span-1";
+        if (f.type === "section") {
+          return (
+            <p
+              key={f.name}
+              className="col-span-2 border-t border-border pt-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"
+            >
+              {f.label}
+            </p>
+          );
+        }
         if (f.type === "boolean") {
           return (
             <label
@@ -121,6 +137,18 @@ export function EntityForm({
                   ),
                 )}
               </Select>
+            ) : f.type === "combobox" ? (
+              <Combobox
+                data-testid={`field-${f.name}`}
+                value={String(values[f.name] ?? "")}
+                onChange={(v) => set(f.name, v)}
+                options={
+                  f.dependsOn
+                    ? resolveTypeOptions(String(values[f.dependsOn] ?? ""))
+                    : (f.comboOptions ?? [])
+                }
+                placeholder={f.placeholder}
+              />
             ) : (
               <Input
                 data-testid={`field-${f.name}`}

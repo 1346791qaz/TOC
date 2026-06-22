@@ -12,12 +12,15 @@ function configFor(node: OilNodeData): { key: EntityKey; fields: FieldDef[]; rec
     return { key: "process_steps", fields: processStepFields, record: node.step };
   if (node.nodeKind === "persona" && node.persona)
     return { key: "personas", fields: personaFields, record: node.persona };
-  if (node.nodeKind === "data_element" && node.data)
+  if (node.nodeKind === "data_element" && node.data) {
+    const d = node.data;
     return {
       key: "data_elements",
-      fields: dataElementFields.filter((f) => f.name !== "step_id"),
-      record: node.data,
+      fields: dataElementFields,
+      // Edit the definition record using data_element_id as the target id.
+      record: { id: d.data_element_id, name: d.name, business_description: d.business_description, source_system: d.source_system, table_or_view: d.table_or_view, field_name: d.field_name, data_type: d.data_type, length: d.length, example_value: d.example_value },
     };
+  }
   return null;
 }
 

@@ -30,14 +30,13 @@ export function Overview({ vsId }: { vsId: string }) {
   const steps = useList<ProcessStep>("process_steps", { where: { value_stream_id: vsId } });
   const personas = useList<Persona>("personas", { where: { value_stream_id: vsId } });
   const constraints = useList<Constraint>("constraints", { where: { value_stream_id: vsId } });
-  const allData = useList<DataElement>("data_elements");
+  const allData = useList<DataElement>("data_elements", { where: { value_stream_id: vsId } });
   const gaps = useGaps(vsId);
   const candidates = useCandidates(vsId);
   const [editing, setEditing] = useState(false);
 
   const vs = (streams.data ?? []).find((s) => s.id === vsId);
-  const stepIds = new Set((steps.data ?? []).map((s) => s.id));
-  const dataCount = (allData.data ?? []).filter((d) => stepIds.has(d.step_id)).length;
+  const dataCount = (allData.data ?? []).length;
   const top = candidates.data?.[0];
   const systemConstraint = (constraints.data ?? []).find((c) => c.is_system_constraint);
 

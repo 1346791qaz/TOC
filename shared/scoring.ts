@@ -1,11 +1,11 @@
 import type {
   Constraint,
-  DataElement,
   FlowEdge,
   Persona,
   ProcessStep,
   StepPersona,
 } from "./schemas";
+import type { LinkedDataElement } from "./gaps";
 
 // ---------------------------------------------------------------------------
 // Constraint-candidate ranking (Theory of Constraints — the "Identify" step).
@@ -39,7 +39,7 @@ export interface ConstraintCandidate {
 
 export interface ScoringInput {
   steps: ProcessStep[];
-  dataElements: DataElement[];
+  dataElements: LinkedDataElement[];
   edges: FlowEdge[];
   stepPersonas: StepPersona[];
   personas: Persona[];
@@ -104,7 +104,7 @@ export function scoreConstraintCandidates(input: ScoringInput): ConstraintCandid
       addFactor(ensure("step", step.id, step.name), {
         key: "missing_key_data",
         label: "Missing / partial data",
-        detail: `${missingKey} missing key, ${partialKey} partial key, ${missingAny} other missing — the OIL is blind here.`,
+        detail: `${missingKey} missing key, ${partialKey} partial key, ${missingAny} other missing — the model is blind here.`,
         points,
       });
     }
