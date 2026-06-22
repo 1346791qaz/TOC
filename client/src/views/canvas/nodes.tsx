@@ -1,5 +1,5 @@
 import { Handle, Position, type NodeProps, type EdgeProps } from "@xyflow/react";
-import { AlertTriangle, ChevronDown, ChevronRight, Database, User, Workflow } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronRight, Database, GripHorizontal, User, Workflow } from "lucide-react";
 import { fmtNum } from "@/lib/utils";
 import { presenceTone } from "@/lib/display";
 import { useUi } from "@/store";
@@ -149,6 +149,10 @@ export function DataNode({ data, selected }: NodeProps) {
 // ---- Attached-cell layout components ------------------------------------
 
 // Faded department backdrop drawn behind a group of persona cells.
+// The body has pointer-events:none so edge clicks pass through. The header
+// label is the drag handle — it has pointer-events:auto so the user can grab
+// and drag the entire frame (React Flow dragHandle=".lane-header" is set on
+// the node object in attachedLayout.ts).
 export function DeptBackground({ data }: NodeProps) {
   const d = data as OilNodeData;
   return (
@@ -163,12 +167,16 @@ export function DeptBackground({ data }: NodeProps) {
       }}
     >
       <span
-        className="absolute left-2 top-1 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider"
+        className="lane-header absolute left-2 top-1 flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider"
         style={{
           color: d.deptColor ?? "hsl(270 60% 80%)",
           background: "hsl(222 30% 6% / 0.65)",
+          pointerEvents: "auto",
+          cursor: "grab",
+          userSelect: "none",
         }}
       >
+        <GripHorizontal size={10} />
         {d.label}
       </span>
     </div>

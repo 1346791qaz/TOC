@@ -36,6 +36,7 @@ const LANE_HEADER = 28;
 const BINDING_ORDER: Record<string, number> = { entry: 0, action: 1, exit: 2 };
 const ROLE_ORDER: Record<string, number> = { executor: 0, approver: 1, consulted: 2, informed: 3 };
 const UNOWNED = "Unowned";
+const PARALLEL_GAP = 20; // vertical gap between stacked parallel steps
 
 const EDGE_STYLE: Record<string, { dash?: string; color: string }> = {
   sequence: { color: "hsl(215 20% 45%)" },
@@ -126,11 +127,13 @@ export function buildAttachedGraph(input: AttachedInput): {
 
   // Lay out a step at (x, y); if expanded, its sub-steps form a left-to-right
   // band beneath it. Returns the slot width consumed and the bottom Y reached.
+  // laneId identifies which domain frame owns this node (and all its children).
   function layoutStep(
     step: ProcessStep,
     x: number,
     y: number,
     depth: number,
+    laneId: string,
   ): { width: number; bottom: number } {
     placed.add(step.id);
     const kids = childrenOf.get(step.id) ?? [];
@@ -152,6 +155,7 @@ export function buildAttachedGraph(input: AttachedInput): {
         isExpanded: expanded.has(step.id),
         depth,
         deptColor: colorFor(ownerDomainOf(step)).border,
+        laneId,
       },
     });
 
@@ -184,6 +188,7 @@ export function buildAttachedGraph(input: AttachedInput): {
             roleOnStep: sp.role_on_step,
             deptColor: colorFor(domainOf(p)).border,
             isExecutor: sp.role_on_step === "executor",
+            laneId,
           },
         });
         cursorY += PERSONA_H + CELL_GAP;
@@ -205,7 +210,7 @@ export function buildAttachedGraph(input: AttachedInput): {
           type: "dataCell",
           position: { x: cellX, y: cursorY },
           zIndex: 2,
-          data: { label: d.name, nodeKind: "data_element", entityId: d.id, dimmed: false, data: d },
+          data: { label: d.name, nodeKind: "data_element", entityId: d.id, dimmed: false, data: d, laneId },
         });
         cursorY += DATA_H + CELL_GAP;
       }
@@ -214,75 +219,97 @@ export function buildAttachedGraph(input: AttachedInput): {
     const cellsBottom = cursorY;
     if (!isOpen) return { width: COLUMN_WIDTH, bottom: cellsBottom };
 
-    // Sub-steps: left-to-right band directly below this step's cells.
+    // Sub-steps: group by sequence_index so same-index sub-steps stack vertically
+    // (parallel within the parent), different indexes go left-to-right (serial).
+    const subSeqMap = new Map<number, ProcessStep[]>();
+    for (const k of kids) {
+      const g = subSeqMap.get(k.sequence_index) ?? [];
+      g.push(k);
+      subSeqMap.set(k.sequence_index, g);
+    }
+    const subGroups = [...subSeqMap.entries()]
+      .sort(([a], [b]) => a - b)
+      .map(([, grp]) => grp);
+
     const bandY = cellsBottom + BAND_GAP;
     let childX = x;
     let maxBottom = bandY;
-    for (const child of kids) {
-      const res = layoutStep(child, childX, bandY, depth + 1);
-      childX += res.width;
-      maxBottom = Math.max(maxBottom, res.bottom);
+    for (const subGroup of subGroups) {
+      let subY = bandY;
+      let groupW = 0;
+      for (const child of subGroup) {
+        const res = layoutStep(child, childX, subY, depth + 1, laneId);
+        subY = res.bottom + PARALLEL_GAP;
+        groupW = Math.max(groupW, res.width);
+        maxBottom = Math.max(maxBottom, res.bottom);
+      }
+      childX += groupW;
     }
     const width = Math.max(COLUMN_WIDTH, childX - x);
     return { width, bottom: maxBottom };
   }
 
+  // Group top-level steps by sequence_index. Same index = run in parallel (stack
+  // vertically in the same column). Different indexes = serial (left to right).
   const sortedTop = steps
     .filter((s) => !s.parent_step_id)
-    .sort((a, b) => a.sequence_index - b.sequence_index);
+    .sort((a, b) => a.sequence_index - b.sequence_index || a.name.localeCompare(b.name));
 
-  interface Meta {
-    step: ProcessStep;
-    x: number;
-    width: number;
-    bottom: number;
-    ownerDomain: string;
-    ownerColor: DomainColor;
+  const seqMap = new Map<number, ProcessStep[]>();
+  for (const s of sortedTop) {
+    const g = seqMap.get(s.sequence_index) ?? [];
+    g.push(s);
+    seqMap.set(s.sequence_index, g);
   }
-  const meta: Meta[] = [];
+
   let runningX = 0;
-  for (const step of sortedTop) {
-    const res = layoutStep(step, runningX, 0, 0);
-    const ownerDomain = ownerDomainOf(step);
-    meta.push({ step, x: runningX, width: res.width, bottom: res.bottom, ownerDomain, ownerColor: colorFor(ownerDomain) });
-    runningX += res.width;
-  }
+  for (const group of seqMap.values()) {
+    // Layout each step in the group vertically, tracking how wide the column is.
+    let cursorY = 0;
+    let groupWidth = COLUMN_WIDTH;
+    const stepLayouts: { step: ProcessStep; top: number; bottom: number }[] = [];
 
-  // Merge consecutive same-domain top slots into one labeled lane.
-  let r = 0;
-  while (r < meta.length) {
-    const dom = meta[r].ownerDomain;
-    let e = r;
-    while (e + 1 < meta.length && meta[e + 1].ownerDomain === dom) e++;
-    const run = meta.slice(r, e + 1);
-    const left = run[0].x - DOMAIN_PAD;
-    const right = run[run.length - 1].x + run[run.length - 1].width - (COLUMN_WIDTH - STEP_W) + DOMAIN_PAD;
-    const top = -LANE_HEADER;
-    const maxBottom = Math.max(...run.map((m) => m.bottom));
-    const color = run[0].ownerColor;
-    laneNodes.push({
-      id: `lane:${run[0].step.id}`,
-      type: "deptBg",
-      position: { x: left, y: top },
-      style: {
-        width: Math.max(STEP_W + DOMAIN_PAD * 2, right - left),
-        height: maxBottom + DOMAIN_PAD - top,
-        pointerEvents: "none",   // let clicks pass through to edges beneath
-      },
-      selectable: false,
-      draggable: false,
-      zIndex: 0,
-      data: {
-        label: dom,
-        nodeKind: "step",
-        entityId: "",
-        dimmed: false,
-        isBackground: true,
-        deptColor: color.border,
-        deptBg: color.bg,
-      },
-    });
-    r = e + 1;
+    for (const step of group) {
+      const laneId = `lane:${step.id}`;
+      const stepTop = cursorY;
+      const res = layoutStep(step, runningX, cursorY, 0, laneId);
+      stepLayouts.push({ step, top: stepTop, bottom: res.bottom });
+      groupWidth = Math.max(groupWidth, res.width);
+      cursorY = res.bottom + PARALLEL_GAP;
+    }
+
+    // One domain frame per top-level step; parallel steps get their own frame
+    // stacked vertically within the same column.
+    const frameWidth = Math.max(STEP_W + DOMAIN_PAD * 2, groupWidth);
+    for (const { step, top, bottom } of stepLayouts) {
+      const ownerDomain = ownerDomainOf(step);
+      const color = colorFor(ownerDomain);
+      laneNodes.push({
+        id: `lane:${step.id}`,
+        type: "deptBg",
+        position: { x: runningX - DOMAIN_PAD, y: top - LANE_HEADER },
+        style: {
+          width: frameWidth,
+          height: bottom - top + DOMAIN_PAD + LANE_HEADER,
+          pointerEvents: "none",  // body clicks pass through to edges; header overrides
+        },
+        selectable: false,
+        draggable: true,
+        dragHandle: ".lane-header",
+        zIndex: 0,
+        data: {
+          label: ownerDomain,
+          nodeKind: "step",
+          entityId: "",
+          dimmed: false,
+          isBackground: true,
+          deptColor: color.border,
+          deptBg: color.bg,
+        },
+      });
+    }
+
+    runningX += groupWidth;
   }
 
   // Edges between any two currently-visible steps: the top-level spine plus the

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Background,
   BackgroundVariant,
@@ -106,6 +106,38 @@ function CanvasInner({ vsId }: { vsId: string }) {
   const onEdgesDelete = (deleted: Edge[]) => {
     for (const e of deleted) if (e.id.startsWith("fe-")) deleteEdge.mutate(e.id.slice(3));
     setEdgeMenu(null);
+  };
+
+  // Lane-drag: when a deptBg frame is dragged, move all member nodes with it.
+  // We capture start positions once and compute absolute offset from there to
+  // avoid floating-point drift from delta-on-delta accumulation.
+  const dragOriginRef = useRef<{
+    laneId: string;
+    lanePos: { x: number; y: number };
+    members: Map<string, { x: number; y: number }>;
+  } | null>(null);
+
+  const onNodeDragStart = (_: unknown, node: Node) => {
+    if (node.type !== "deptBg") return;
+    const members = new Map<string, { x: number; y: number }>();
+    for (const n of nodes) {
+      if ((n.data as OilNodeData).laneId === node.id)
+        members.set(n.id, { x: n.position.x, y: n.position.y });
+    }
+    dragOriginRef.current = { laneId: node.id, lanePos: { x: node.position.x, y: node.position.y }, members };
+  };
+
+  const onNodeDrag = (_: unknown, node: Node) => {
+    const o = dragOriginRef.current;
+    if (!o || node.id !== o.laneId) return;
+    const dx = node.position.x - o.lanePos.x;
+    const dy = node.position.y - o.lanePos.y;
+    setNodes((nds) =>
+      nds.map((n) => {
+        const sp = o.members.get(n.id);
+        return sp ? { ...n, position: { x: sp.x + dx, y: sp.y + dy } } : n;
+      }),
+    );
   };
 
   const ready =
@@ -259,6 +291,8 @@ function CanvasInner({ vsId }: { vsId: string }) {
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
             onEdgesDelete={onEdgesDelete}
+            onNodeDragStart={onNodeDragStart}
+            onNodeDrag={onNodeDrag}
             onEdgeClick={(evt, edge) => {
               if (!edge.id.startsWith("fe-")) return;
               const feId = edge.id.slice(3);

@@ -36,6 +36,8 @@ export interface OilNodeData extends Record<string, unknown> {
   subStepCount?: number;
   isExpanded?: boolean;
   depth?: number;
+  // Lane membership: which domain frame owns this node (for group drag in Full OIL mode).
+  laneId?: string;
 }
 
 export const NODE_SIZES: Record<FlowNodeType, { width: number; height: number }> = {
