@@ -327,50 +327,127 @@ export function buildAttachedGraph(input: AttachedInput): {
     seqMap.set(s.sequence_index, g);
   }
 
-  interface ColMeta {
-    firstStep: ProcessStep;
+  // One entry per top-level step. Parallel steps (same sequence_index group)
+  // are flagged isParallel=true and always get their own isolated frame.
+  // Single-step columns (isParallel=false) may merge horizontally when
+  // consecutive neighbours share the same domain.
+  interface StepFrame {
+    step: ProcessStep;
     x: number;
-    width: number;
-    bottom: number;
+    colWidth: number;
+    top: number;
     ownBottom: number;
     ownerDomain: string;
     ownerColor: DomainColor;
+    isParallel: boolean;
   }
-  const cols: ColMeta[] = [];
+  const stepFrames: StepFrame[] = [];
 
   let runningX = 0;
   for (const group of seqMap.values()) {
+    const isParallel = group.length > 1;
     let cursorY = 0;
     let groupWidth = COLUMN_WIDTH;
-    let groupOwnBottom = 0;
 
     for (const step of group) {
+      const stepTop = cursorY;
       const laneId = `lane:${step.id}`;
       const res = layoutStep(step, runningX, cursorY, 0, laneId);
       groupWidth = Math.max(groupWidth, res.width);
-      groupOwnBottom = Math.max(groupOwnBottom, res.ownBottom);
+      stepFrames.push({
+        step,
+        x: runningX,
+        colWidth: groupWidth,
+        top: stepTop,
+        ownBottom: res.ownBottom,
+        ownerDomain: ownerDomainOf(step),
+        ownerColor: colorFor(ownerDomainOf(step)),
+        isParallel,
+      });
       cursorY = res.bottom + PARALLEL_GAP;
     }
 
-    const ownerDomain = ownerDomainOf(group[0]);
-    cols.push({
-      firstStep: group[0],
-      x: runningX,
-      width: groupWidth,
-      bottom: cursorY - PARALLEL_GAP,
-      ownBottom: groupOwnBottom,
-      ownerDomain,
-      ownerColor: colorFor(ownerDomain),
-    });
+    // Back-fill colWidth now that we know the final groupWidth.
+    for (let fi = stepFrames.length - group.length; fi < stepFrames.length; fi++) {
+      stepFrames[fi].colWidth = groupWidth;
+    }
 
     runningX += groupWidth;
   }
 
-  // Emit top-level domain frames: merge consecutive same-domain columns into one
-  // labeled lane. Frame height covers only the step's own content (ownBottom), not
-  // sub-step bands — those get their own frames emitted inside layoutStep above.
-  const topCols = cols.map((c) => ({ ...c, bandY: 0, bottom: c.ownBottom }));
-  emitLanes(topCols, 0);
+  // Emit top-level domain frames. Parallel steps always get their own frame.
+  // Single-step columns merge with consecutive neighbours that share the same domain.
+  {
+    let i = 0;
+    while (i < stepFrames.length) {
+      const sf = stepFrames[i];
+      if (sf.isParallel) {
+        // Isolated frame for this one step only.
+        const left = sf.x - DOMAIN_PAD;
+        const right = sf.x + sf.colWidth - (COLUMN_WIDTH - STEP_W) + DOMAIN_PAD;
+        const color = sf.ownerColor;
+        laneNodes.push({
+          id: `lane:${sf.step.id}`,
+          type: "deptBg",
+          position: { x: left, y: -LANE_HEADER },
+          style: {
+            width: Math.max(STEP_W + DOMAIN_PAD * 2, right - left),
+            height: sf.ownBottom + DOMAIN_PAD + LANE_HEADER,
+            pointerEvents: "none",
+          },
+          selectable: false,
+          draggable: true,
+          dragHandle: ".lane-header",
+          zIndex: 0,
+          data: {
+            label: sf.ownerDomain,
+            nodeKind: "step",
+            entityId: "",
+            dimmed: false,
+            isBackground: true,
+            deptColor: color.border,
+            deptBg: color.bg,
+          },
+        });
+        i++;
+      } else {
+        // Merge consecutive single-step columns with the same domain.
+        const dom = sf.ownerDomain;
+        let e = i;
+        while (e + 1 < stepFrames.length && !stepFrames[e + 1].isParallel && stepFrames[e + 1].ownerDomain === dom) e++;
+        const run = stepFrames.slice(i, e + 1);
+        const left = run[0].x - DOMAIN_PAD;
+        const lastSf = run[run.length - 1];
+        const right = lastSf.x + lastSf.colWidth - (COLUMN_WIDTH - STEP_W) + DOMAIN_PAD;
+        const maxBottom = Math.max(...run.map((f) => f.ownBottom));
+        const color = run[0].ownerColor;
+        laneNodes.push({
+          id: `lane:${run[0].step.id}`,
+          type: "deptBg",
+          position: { x: left, y: -LANE_HEADER },
+          style: {
+            width: Math.max(STEP_W + DOMAIN_PAD * 2, right - left),
+            height: maxBottom + DOMAIN_PAD + LANE_HEADER,
+            pointerEvents: "none",
+          },
+          selectable: false,
+          draggable: true,
+          dragHandle: ".lane-header",
+          zIndex: 0,
+          data: {
+            label: dom,
+            nodeKind: "step",
+            entityId: "",
+            dimmed: false,
+            isBackground: true,
+            deptColor: color.border,
+            deptBg: color.bg,
+          },
+        });
+        i = e + 1;
+      }
+    }
+  }
 
   // Edges between any two currently-visible steps: the top-level spine plus the
   // mini-spine of each expanded step (siblings sit side-by-side, so arrows read
