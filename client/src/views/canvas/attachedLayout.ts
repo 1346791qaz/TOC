@@ -125,16 +125,62 @@ export function buildAttachedGraph(input: AttachedInput): {
   const cellNodes: Node<OilNodeData>[] = [];
   const placed = new Set<string>();
 
+  // Emit merged domain frames for a set of sub-columns (consecutive same-domain
+  // groups get merged into one frame). Used for both top-level lanes and sub-step bands.
+  function emitLanes(
+    subCols: { firstStep: ProcessStep; x: number; width: number; bandY: number; bottom: number; ownerDomain: string; ownerColor: DomainColor }[],
+    zIndex: number,
+  ) {
+    let i = 0;
+    while (i < subCols.length) {
+      const dom = subCols[i].ownerDomain;
+      let e = i;
+      while (e + 1 < subCols.length && subCols[e + 1].ownerDomain === dom) e++;
+      const run = subCols.slice(i, e + 1);
+      const left = run[0].x - DOMAIN_PAD;
+      const right = run[run.length - 1].x + run[run.length - 1].width - (COLUMN_WIDTH - STEP_W) + DOMAIN_PAD;
+      const bandY = run[0].bandY;
+      const maxBottom = Math.max(...run.map((c) => c.bottom));
+      const color = run[0].ownerColor;
+      laneNodes.push({
+        id: `lane:${run[0].firstStep.id}`,
+        type: "deptBg",
+        position: { x: left, y: bandY - LANE_HEADER },
+        style: {
+          width: Math.max(STEP_W + DOMAIN_PAD * 2, right - left),
+          height: maxBottom - bandY + DOMAIN_PAD + LANE_HEADER,
+          pointerEvents: "none",
+        },
+        selectable: false,
+        draggable: true,
+        dragHandle: ".lane-header",
+        zIndex,
+        data: {
+          label: dom,
+          nodeKind: "step",
+          entityId: "",
+          dimmed: false,
+          isBackground: true,
+          deptColor: color.border,
+          deptBg: color.bg,
+        },
+      });
+      i = e + 1;
+    }
+  }
+
   // Lay out a step at (x, y); if expanded, its sub-steps form a left-to-right
-  // band beneath it. Returns the slot width consumed and the bottom Y reached.
-  // laneId identifies which domain frame owns this node (and all its children).
+  // band beneath it. Returns:
+  //   width    — slot width consumed (for spacing subsequent columns)
+  //   bottom   — total bottom including sub-step band (for spacing parallel steps)
+  //   ownBottom — bottom of this step's OWN content only (for sizing this step's domain frame)
   function layoutStep(
     step: ProcessStep,
     x: number,
     y: number,
     depth: number,
     laneId: string,
-  ): { width: number; bottom: number } {
+  ): { width: number; bottom: number; ownBottom: number } {
     placed.add(step.id);
     const kids = childrenOf.get(step.id) ?? [];
     const isOpen = expanded.has(step.id) && kids.length > 0;
@@ -217,7 +263,7 @@ export function buildAttachedGraph(input: AttachedInput): {
     }
 
     const cellsBottom = cursorY;
-    if (!isOpen) return { width: COLUMN_WIDTH, bottom: cellsBottom };
+    if (!isOpen) return { width: COLUMN_WIDTH, bottom: cellsBottom, ownBottom: cellsBottom };
 
     // Sub-steps: group by sequence_index so same-index sub-steps stack vertically
     // (parallel within the parent), different indexes go left-to-right (serial).
@@ -234,19 +280,38 @@ export function buildAttachedGraph(input: AttachedInput): {
     const bandY = cellsBottom + BAND_GAP;
     let childX = x;
     let maxBottom = bandY;
+
+    // Track sub-column metadata so we can emit correct domain frames per sub-step.
+    const subCols: { firstStep: ProcessStep; x: number; width: number; bandY: number; bottom: number; ownerDomain: string; ownerColor: DomainColor }[] = [];
+
     for (const subGroup of subGroups) {
       let subY = bandY;
-      let groupW = 0;
+      let groupW = COLUMN_WIDTH;
+      let groupBottom = bandY;
       for (const child of subGroup) {
-        const res = layoutStep(child, childX, subY, depth + 1, laneId);
+        const res = layoutStep(child, childX, subY, depth + 1, `lane:${child.id}`);
         subY = res.bottom + PARALLEL_GAP;
         groupW = Math.max(groupW, res.width);
+        groupBottom = Math.max(groupBottom, res.bottom);
         maxBottom = Math.max(maxBottom, res.bottom);
       }
+      subCols.push({
+        firstStep: subGroup[0],
+        x: childX,
+        width: groupW,
+        bandY,
+        bottom: groupBottom,
+        ownerDomain: ownerDomainOf(subGroup[0]),
+        ownerColor: colorFor(ownerDomainOf(subGroup[0])),
+      });
       childX += groupW;
     }
+
+    // Emit domain frames for the sub-step band, merged by consecutive same domain.
+    emitLanes(subCols, depth + 1);
+
     const width = Math.max(COLUMN_WIDTH, childX - x);
-    return { width, bottom: maxBottom };
+    return { width, bottom: maxBottom, ownBottom: cellsBottom };
   }
 
   // Group top-level steps by sequence_index. Same index = run in parallel (stack
@@ -267,6 +332,7 @@ export function buildAttachedGraph(input: AttachedInput): {
     x: number;
     width: number;
     bottom: number;
+    ownBottom: number;
     ownerDomain: string;
     ownerColor: DomainColor;
   }
@@ -276,11 +342,13 @@ export function buildAttachedGraph(input: AttachedInput): {
   for (const group of seqMap.values()) {
     let cursorY = 0;
     let groupWidth = COLUMN_WIDTH;
+    let groupOwnBottom = 0;
 
     for (const step of group) {
       const laneId = `lane:${step.id}`;
       const res = layoutStep(step, runningX, cursorY, 0, laneId);
       groupWidth = Math.max(groupWidth, res.width);
+      groupOwnBottom = Math.max(groupOwnBottom, res.ownBottom);
       cursorY = res.bottom + PARALLEL_GAP;
     }
 
@@ -290,6 +358,7 @@ export function buildAttachedGraph(input: AttachedInput): {
       x: runningX,
       width: groupWidth,
       bottom: cursorY - PARALLEL_GAP,
+      ownBottom: groupOwnBottom,
       ownerDomain,
       ownerColor: colorFor(ownerDomain),
     });
@@ -297,42 +366,11 @@ export function buildAttachedGraph(input: AttachedInput): {
     runningX += groupWidth;
   }
 
-  // Merge consecutive same-domain columns into one labeled lane.
-  let ci = 0;
-  while (ci < cols.length) {
-    const dom = cols[ci].ownerDomain;
-    let ce = ci;
-    while (ce + 1 < cols.length && cols[ce + 1].ownerDomain === dom) ce++;
-    const run = cols.slice(ci, ce + 1);
-    const left = run[0].x - DOMAIN_PAD;
-    const right = run[run.length - 1].x + run[run.length - 1].width - (COLUMN_WIDTH - STEP_W) + DOMAIN_PAD;
-    const maxBottom = Math.max(...run.map((c) => c.bottom));
-    const color = run[0].ownerColor;
-    laneNodes.push({
-      id: `lane:${run[0].firstStep.id}`,
-      type: "deptBg",
-      position: { x: left, y: -LANE_HEADER },
-      style: {
-        width: Math.max(STEP_W + DOMAIN_PAD * 2, right - left),
-        height: maxBottom + DOMAIN_PAD + LANE_HEADER,
-        pointerEvents: "none",
-      },
-      selectable: false,
-      draggable: true,
-      dragHandle: ".lane-header",
-      zIndex: 0,
-      data: {
-        label: dom,
-        nodeKind: "step",
-        entityId: "",
-        dimmed: false,
-        isBackground: true,
-        deptColor: color.border,
-        deptBg: color.bg,
-      },
-    });
-    ci = ce + 1;
-  }
+  // Emit top-level domain frames: merge consecutive same-domain columns into one
+  // labeled lane. Frame height covers only the step's own content (ownBottom), not
+  // sub-step bands — those get their own frames emitted inside layoutStep above.
+  const topCols = cols.map((c) => ({ ...c, bandY: 0, bottom: c.ownBottom }));
+  emitLanes(topCols, 0);
 
   // Edges between any two currently-visible steps: the top-level spine plus the
   // mini-spine of each expanded step (siblings sit side-by-side, so arrows read
