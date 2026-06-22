@@ -385,12 +385,12 @@ function CanvasInner({ vsId }: { vsId: string }) {
                 ))}
               </div>
             )}
-            <div className="relative flex items-center gap-1.5 rounded-md border border-border bg-surface/90 p-1 text-[11px] text-muted-foreground backdrop-blur">
-              <span className="shrink-0 pl-1">Drag to link · new edge:</span>
+            <div className="relative flex items-center gap-1.5 rounded-md border border-border bg-surface/90 px-2 py-1.5 text-[11px] text-muted-foreground backdrop-blur">
+              <span className="shrink-0">Drag to link · new edge:</span>
               <Select
                 value={newEdgeType}
                 onChange={(e) => setNewEdgeType(e.target.value as EdgeType)}
-                className="h-7 w-44"
+                className="h-9 w-44"
               >
                 {EDGE_TYPES.map((t) => (
                   <option key={t} value={t}>
@@ -506,10 +506,10 @@ function CanvasInner({ vsId }: { vsId: string }) {
           style={{ left: edgeMenu.x + 8, top: edgeMenu.y - 10 }}
           onClick={(e) => e.stopPropagation()}
         >
-          <p className="mb-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+          <p className="mb-3 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
             Flow edge
           </p>
-          <div className="space-y-2">
+          <div className="space-y-3">
             <Select
               value={edgeMenu.edgeType}
               onChange={(e) => {
@@ -517,14 +517,14 @@ function CanvasInner({ vsId }: { vsId: string }) {
                 updateEdge.mutate({ id: edgeMenu.id, data: { edge_type: newType } });
                 setEdgeMenu((m) => m && { ...m, edgeType: newType });
               }}
-              className="h-7"
+              className="h-9"
             >
               {EDGE_TYPES.map((t) => (
                 <option key={t} value={t}>{titleCase(t)}</option>
               ))}
             </Select>
             <Button
-              size="sm"
+              size="md"
               variant="danger"
               className="w-full"
               onClick={() => {
