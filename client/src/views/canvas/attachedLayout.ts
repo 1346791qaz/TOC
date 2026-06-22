@@ -318,7 +318,7 @@ export function buildAttachedGraph(input: AttachedInput): {
   // vertically in the same column). Different indexes = serial (left to right).
   const sortedTop = steps
     .filter((s) => !s.parent_step_id)
-    .sort((a, b) => a.sequence_index - b.sequence_index || a.name.localeCompare(b.name));
+    .sort((a, b) => a.sequence_index - b.sequence_index || a.created_at.localeCompare(b.created_at));
 
   const seqMap = new Map<number, ProcessStep[]>();
   for (const s of sortedTop) {
@@ -382,17 +382,17 @@ export function buildAttachedGraph(input: AttachedInput): {
     while (i < stepFrames.length) {
       const sf = stepFrames[i];
       if (sf.isParallel) {
-        // Isolated frame for this one step only.
+        // Isolated frame for this one step only, anchored to this step's Y range.
         const left = sf.x - DOMAIN_PAD;
         const right = sf.x + sf.colWidth - (COLUMN_WIDTH - STEP_W) + DOMAIN_PAD;
         const color = sf.ownerColor;
         laneNodes.push({
           id: `lane:${sf.step.id}`,
           type: "deptBg",
-          position: { x: left, y: -LANE_HEADER },
+          position: { x: left, y: sf.top - LANE_HEADER },
           style: {
             width: Math.max(STEP_W + DOMAIN_PAD * 2, right - left),
-            height: sf.ownBottom + DOMAIN_PAD + LANE_HEADER,
+            height: sf.ownBottom - sf.top + DOMAIN_PAD + LANE_HEADER,
             pointerEvents: "none",
           },
           selectable: false,
