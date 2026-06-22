@@ -36,7 +36,8 @@ const LANE_HEADER = 28;
 const BINDING_ORDER: Record<string, number> = { entry: 0, action: 1, exit: 2 };
 const ROLE_ORDER: Record<string, number> = { executor: 0, approver: 1, consulted: 2, informed: 3 };
 const UNOWNED = "Unowned";
-const PARALLEL_GAP = 20; // vertical gap between stacked parallel steps
+const PARALLEL_GAP = 20; // vertical gap between stacked parallel steps (sub-step bands)
+const FRAME_GAP = 8; // min clearance between consecutive parallel top-level frames
 
 const EDGE_STYLE: Record<string, { dash?: string; color: string }> = {
   sequence: { color: "hsl(215 20% 45%)" },
@@ -364,7 +365,10 @@ export function buildAttachedGraph(input: AttachedInput): {
         ownerColor: colorFor(ownerDomainOf(step)),
         isParallel,
       });
-      cursorY = res.bottom + PARALLEL_GAP;
+      // For parallel groups, ensure enough vertical room so the next frame's
+      // header clears the bottom padding of this frame: LANE_HEADER + DOMAIN_PAD + FRAME_GAP.
+      const rowGap = isParallel ? LANE_HEADER + DOMAIN_PAD + FRAME_GAP : PARALLEL_GAP;
+      cursorY = res.bottom + rowGap;
     }
 
     // Back-fill colWidth now that we know the final groupWidth.
