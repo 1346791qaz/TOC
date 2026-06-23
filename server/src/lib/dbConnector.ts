@@ -14,6 +14,7 @@ export interface ColumnInfo {
   data_type: string;
   is_nullable: boolean;
   column_default: string | null;
+  length: string | null;
 }
 
 export interface TestResult {
@@ -32,6 +33,15 @@ function tryParseJson(s: string | null): Record<string, unknown> | null {
 }
 
 function str(v: unknown): string { return String(v ?? ""); }
+
+/** Format a length/precision hint from DB metadata into a display string. */
+function fmtLength(charLen: number | null, numPrecision: number | null, numScale: number | null): string | null {
+  if (charLen != null && charLen > 0) return String(charLen);
+  if (numPrecision != null) {
+    return numScale != null && numScale > 0 ? `${numPrecision},${numScale}` : String(numPrecision);
+  }
+  return null;
+}
 
 // ---------------------------------------------------------------------------
 // PostgreSQL (also used for Redshift, TimescaleDB)
@@ -90,8 +100,10 @@ async function pgColumns(conn: DbConnection, schema: string, table: string): Pro
   try {
     const res = await client.query<{
       column_name: string; data_type: string; is_nullable: string; column_default: string | null;
+      character_maximum_length: number | null; numeric_precision: number | null; numeric_scale: number | null;
     }>(
-      `SELECT column_name, data_type, is_nullable, column_default
+      `SELECT column_name, data_type, is_nullable, column_default,
+              character_maximum_length, numeric_precision, numeric_scale
        FROM information_schema.columns
        WHERE table_schema = $1 AND table_name = $2
        ORDER BY ordinal_position`,
@@ -100,6 +112,7 @@ async function pgColumns(conn: DbConnection, schema: string, table: string): Pro
     return res.rows.map((r) => ({
       column_name: r.column_name, data_type: r.data_type,
       is_nullable: r.is_nullable === "YES", column_default: r.column_default,
+      length: fmtLength(r.character_maximum_length, r.numeric_precision, r.numeric_scale),
     }));
   } finally {
     await client.end().catch(() => {});
@@ -174,13 +187,19 @@ async function mysqlColumns(conn: DbConnection, schema: string, table: string): 
   const connection = await mysql.createConnection(buildMysqlConfig(conn));
   try {
     const [rows] = await connection.query(
-      `SELECT column_name, data_type, is_nullable, column_default
+      `SELECT column_name, data_type, is_nullable, column_default,
+              character_maximum_length, numeric_precision, numeric_scale
        FROM information_schema.columns WHERE table_schema = ? AND table_name = ? ORDER BY ordinal_position`,
       [schema, table],
     );
     return (rows as Array<Record<string, unknown>>).map((r) => ({
       column_name: str(r["column_name"]), data_type: str(r["data_type"]),
       is_nullable: str(r["is_nullable"]) === "YES", column_default: r["column_default"] != null ? str(r["column_default"]) : null,
+      length: fmtLength(
+        r["character_maximum_length"] != null ? Number(r["character_maximum_length"]) : null,
+        r["numeric_precision"] != null ? Number(r["numeric_precision"]) : null,
+        r["numeric_scale"] != null ? Number(r["numeric_scale"]) : null,
+      ),
     }));
   } finally {
     await connection.end().catch(() => {});
@@ -259,15 +278,19 @@ async function mssqlColumns(conn: DbConnection, schema: string, table: string): 
     const result = await pool.request()
       .input("schema", mssql.NVarChar, schema)
       .input("table", mssql.NVarChar, table)
-      .query(`SELECT column_name, data_type, is_nullable, column_default
+      .query(`SELECT column_name, data_type, is_nullable, column_default,
+                     character_maximum_length, numeric_precision, numeric_scale
               FROM information_schema.columns
               WHERE table_schema = @schema AND table_name = @table
               ORDER BY ordinal_position`);
-    return (result.recordset as Array<{ column_name: string; data_type: string; is_nullable: string; column_default: string | null }>)
-      .map((r) => ({
-        column_name: r.column_name, data_type: r.data_type,
-        is_nullable: r.is_nullable === "YES", column_default: r.column_default,
-      }));
+    return (result.recordset as Array<{
+      column_name: string; data_type: string; is_nullable: string; column_default: string | null;
+      character_maximum_length: number | null; numeric_precision: number | null; numeric_scale: number | null;
+    }>).map((r) => ({
+      column_name: r.column_name, data_type: r.data_type,
+      is_nullable: r.is_nullable === "YES", column_default: r.column_default,
+      length: fmtLength(r.character_maximum_length, r.numeric_precision, r.numeric_scale),
+    }));
   } finally {
     await pool.close().catch(() => {});
   }
@@ -334,8 +357,8 @@ async function oracleColumns(conn: DbConnection, schema: string, table: string):
   const oracledb = await import("oracledb");
   const connection = await oracledb.getConnection(buildOracleConfig(conn));
   try {
-    const result = await connection.execute<[string, string, string, string]>(
-      `SELECT COLUMN_NAME, DATA_TYPE, NULLABLE, DATA_DEFAULT
+    const result = await connection.execute<[string, string, string, string, number | null, number | null, number | null]>(
+      `SELECT COLUMN_NAME, DATA_TYPE, NULLABLE, DATA_DEFAULT, CHAR_LENGTH, DATA_PRECISION, DATA_SCALE
        FROM ALL_TAB_COLUMNS WHERE OWNER = :1 AND TABLE_NAME = :2
        ORDER BY COLUMN_ID`,
       [schema.toUpperCase(), table.toUpperCase()], { outFormat: oracledb.OUT_FORMAT_ARRAY },
@@ -343,6 +366,7 @@ async function oracleColumns(conn: DbConnection, schema: string, table: string):
     return (result.rows ?? []).map((r) => ({
       column_name: r[0], data_type: r[1],
       is_nullable: r[2] === "Y", column_default: r[3] ?? null,
+      length: fmtLength(r[4] && r[4] > 0 ? r[4] : null, r[5], r[6]),
     }));
   } finally {
     await connection.close().catch(() => {});
@@ -417,13 +441,14 @@ async function hanaTables(conn: DbConnection, schema: string): Promise<TableInfo
 async function hanaColumns(conn: DbConnection, schema: string, table: string): Promise<ColumnInfo[]> {
   const rows = await hanaQuery<Record<string, unknown>>(
     conn,
-    `SELECT COLUMN_NAME, DATA_TYPE_NAME, IS_NULLABLE, DEFAULT_VALUE
+    `SELECT COLUMN_NAME, DATA_TYPE_NAME, IS_NULLABLE, DEFAULT_VALUE, LENGTH
      FROM SYS.TABLE_COLUMNS WHERE SCHEMA_NAME = ? AND TABLE_NAME = ? ORDER BY POSITION`,
     [schema, table],
   );
   return rows.map((r) => ({
     column_name: str(r["COLUMN_NAME"]), data_type: str(r["DATA_TYPE_NAME"]),
     is_nullable: str(r["IS_NULLABLE"]) === "TRUE", column_default: r["DEFAULT_VALUE"] != null ? str(r["DEFAULT_VALUE"]) : null,
+    length: r["LENGTH"] != null ? str(r["LENGTH"]) : null,
   }));
 }
 
@@ -496,7 +521,7 @@ async function mongoColumns(conn: DbConnection, schema: string, table: string): 
       flattenMongoDoc(doc, "", fields);
     }
     return Array.from(fields.entries()).map(([name, type]) => ({
-      column_name: name, data_type: type, is_nullable: true, column_default: null,
+      column_name: name, data_type: type, is_nullable: true, column_default: null, length: null,
     }));
   } finally {
     await client.close().catch(() => {});
@@ -607,7 +632,7 @@ async function influxColumns(conn: DbConnection, schema: string, table: string):
     .map((l) => l.split(",").pop()?.trim() ?? "")
     .filter(Boolean);
   return [...new Set(fields)].map((f) => ({
-    column_name: f, data_type: "field", is_nullable: true, column_default: null,
+    column_name: f, data_type: "field", is_nullable: true, column_default: null, length: null,
   }));
 }
 
@@ -679,7 +704,7 @@ async function cassandraColumns(conn: DbConnection, schema: string, table: strin
     );
     return result.rows.map((r) => ({
       column_name: r["column_name"] as string, data_type: r["type"] as string,
-      is_nullable: true, column_default: null,
+      is_nullable: true, column_default: null, length: null,
     }));
   } finally {
     await client.shutdown().catch(() => {});
@@ -801,6 +826,7 @@ async function snowflakeColumns(conn: DbConnection, schema: string, table: strin
           resolve((rows ?? []).map((r: Record<string, unknown>) => ({
             column_name: str(r["name"]), data_type: str(r["type"]),
             is_nullable: str(r["null?"]) === "Y", column_default: r["default"] != null ? str(r["default"]) : null,
+            length: null,
           })));
         },
       });

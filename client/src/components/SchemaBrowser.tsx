@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 
 interface SchemaInfo { schema: string }
 interface TableInfo { table_name: string; table_type: string }
-export interface ColumnInfo { column_name: string; data_type: string; is_nullable: boolean }
+export interface ColumnInfo { column_name: string; data_type: string; is_nullable: boolean; length: string | null }
 
 export interface SelectedColumn {
   connection_name: string;
@@ -14,6 +14,7 @@ export interface SelectedColumn {
   column_name: string;
   data_type: string;
   is_nullable: boolean;
+  length: string | null;
 }
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -244,6 +245,7 @@ export function SchemaBrowser({
                                         column_name: col.column_name,
                                         data_type: col.data_type,
                                         is_nullable: col.is_nullable,
+                                        length: col.length ?? null,
                                       })
                                     }
                                   />
