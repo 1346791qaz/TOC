@@ -10,6 +10,7 @@ import { analyticsRouter } from "./routes/analytics";
 import { ioRouter } from "./routes/io";
 import { agreementRouter } from "./routes/agreement";
 import { authRouter } from "./routes/auth";
+import { connectionsRouter } from "./routes/connections";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -35,6 +36,10 @@ function buildApp() {
   app.use("/api/io", ioRouter());
   app.use("/api/agreement", agreementRouter());
   app.use("/api/auth", authRouter());
+
+  // Connection-specific actions (test, schema-browse) for db_connections.
+  // The generic CRUD for db_connections is handled above via ENTITY_KEYS.
+  app.use("/api/db_connections", connectionsRouter());
 
   // In production, serve the built frontend from dist/
   const distPath = path.resolve(__dirname, "../../dist");

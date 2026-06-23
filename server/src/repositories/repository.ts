@@ -7,6 +7,7 @@ const BOOLEAN_COLUMNS: Record<string, string[]> = {
   metrics: ["is_leading"],
   step_data_elements: ["is_key"],
   constraints: ["is_system_constraint"],
+  db_connections: ["ssl"],
 };
 
 type EntitySchema = {

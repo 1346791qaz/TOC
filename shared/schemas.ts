@@ -193,6 +193,34 @@ export const constraint = makeEntity({
 export type Constraint = z.infer<typeof constraint.record>;
 
 // ---------------------------------------------------------------------------
+// 4.9b db_connections — saved database connection configs, scoped per value
+// stream. driver_type must be one of the supported Node.js drivers.
+// ---------------------------------------------------------------------------
+const dbDriverTypeSchema = z.enum([
+  "postgresql",
+  "mysql",
+  "mssql",
+  "snowflake",
+  "other",
+]);
+export type DbDriverType = z.infer<typeof dbDriverTypeSchema>;
+export const DB_DRIVER_TYPES = dbDriverTypeSchema.options;
+
+export const dbConnection = makeEntity({
+  value_stream_id: z.string().uuid(),
+  name: z.string().min(1, "Name is required"),
+  driver_type: dbDriverTypeSchema.default("postgresql"),
+  host: nullableText,
+  port: nullableNumber,
+  database_name: nullableText,
+  username: nullableText,
+  password: nullableText,
+  ssl: z.boolean().default(false),
+  extra_options: nullableText,
+});
+export type DbConnection = z.infer<typeof dbConnection.record>;
+
+// ---------------------------------------------------------------------------
 // 4.10 flow_edges
 // ---------------------------------------------------------------------------
 export const flowEdge = makeEntity({
@@ -222,6 +250,7 @@ export const ENTITIES = {
   step_data_elements: { table: "step_data_elements", schema: stepDataElement },
   constraints: { table: "constraints", schema: constraint },
   flow_edges: { table: "flow_edges", schema: flowEdge },
+  db_connections: { table: "db_connections", schema: dbConnection },
 } as const;
 
 export type EntityKey = keyof typeof ENTITIES;

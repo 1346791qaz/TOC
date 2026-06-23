@@ -3,6 +3,7 @@ import {
   type Assumption,
   type Constraint,
   type DataElement,
+  type DbConnection,
   type Engagement,
   type EntityKey,
   type FlowEdge,
@@ -28,6 +29,7 @@ export interface RepoMap {
   step_data_elements: Repository<StepDataElement>;
   constraints: Repository<Constraint>;
   flow_edges: Repository<FlowEdge>;
+  db_connections: Repository<DbConnection>;
 }
 
 // One repository instance per entity, keyed by its API/table name.
