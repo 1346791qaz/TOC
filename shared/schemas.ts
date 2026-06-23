@@ -197,11 +197,30 @@ export type Constraint = z.infer<typeof constraint.record>;
 // stream. driver_type must be one of the supported Node.js drivers.
 // ---------------------------------------------------------------------------
 const dbDriverTypeSchema = z.enum([
-  "postgresql",
-  "mysql",
-  "mssql",
-  "snowflake",
-  "other",
+  // ---- Relational SQL ----
+  "postgresql",    // pg
+  "mysql",         // mysql2
+  "mssql",         // mssql
+  "oracle",        // oracledb (thin mode — no Instant Client needed)
+  "db2",           // ibm_db (requires IBM DB2 CLI or IBM Data Server Driver)
+  "hana",          // hdb (SAP HANA pure-JS driver)
+  "odbc",          // odbc (requires system ODBC driver manager + DSN)
+  // ---- SQL aliases served by an existing driver ----
+  "redshift",      // uses pg driver, default port 5439
+  "azure-sql",     // uses mssql driver
+  "timescaledb",   // uses pg driver
+  "mariadb",       // uses mysql2 driver
+  // ---- Cloud DW ----
+  "snowflake",     // snowflake-sdk
+  "bigquery",      // @google-cloud/bigquery (needs service-account JSON)
+  // ---- Time Series / IoT ----
+  "influxdb",      // @influxdata/influxdb-client v2
+  // ---- NoSQL ----
+  "mongodb",       // mongodb
+  "cassandra",     // cassandra-driver
+  "redis",         // ioredis
+  // ---- Catch-all ----
+  "other",         // free-form connection string for reference/documentation
 ]);
 export type DbDriverType = z.infer<typeof dbDriverTypeSchema>;
 export const DB_DRIVER_TYPES = dbDriverTypeSchema.options;
