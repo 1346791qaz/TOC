@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, ChevronRight, Database, Loader2, Plus, Search, Table2 } from "lucide-react";
 import type { DataElement, DbConnection } from "@shared/schemas";
+import { BINDING_POINTS, PRESENCE } from "@shared/enums";
 import { ApiError } from "@/lib/api";
 import { useCreate, useList } from "@/lib/queries";
-import { stepDataElementFields } from "@/lib/entityConfig";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/primitives";
-import { EntityForm } from "@/components/EntityForm";
 import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
@@ -21,6 +20,20 @@ type FilterState =
 
 interface SchemaInfo { schema: string }
 interface TableInfo  { table_name: string; table_type: string }
+
+interface ElementSettings {
+  binding_point: string;
+  presence: string;
+  is_key: boolean;
+  quality_notes: string;
+}
+
+const DEFAULT_SETTINGS: ElementSettings = {
+  binding_point: "entry",
+  presence:      "present",
+  is_key:        false,
+  quality_notes: "",
+};
 
 // ---------------------------------------------------------------------------
 // Fetch helper
@@ -293,6 +306,7 @@ export function BindDataModal({
   const [filter,   setFilter]   = useState<FilterState>({ type: "all" });
   const [search,   setSearch]   = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [perElem,  setPerElem]  = useState<Record<string, ElementSettings>>({});
   const [error,    setError]    = useState<string | null>(null);
   const [saving,   setSaving]   = useState(false);
 
@@ -302,10 +316,33 @@ export function BindDataModal({
       setFilter({ type: "all" });
       setSearch("");
       setSelected(new Set());
+      setPerElem({});
       setError(null);
       setSaving(false);
     }
   }, [open]);
+
+  function goToJunction() {
+    setPerElem((prev) => {
+      const next: Record<string, ElementSettings> = {};
+      for (const id of selected) {
+        next[id] = prev[id] ?? { ...DEFAULT_SETTINGS };
+      }
+      return next;
+    });
+    setPhase("junction");
+  }
+
+  function setElemField<K extends keyof ElementSettings>(
+    id: string,
+    key: K,
+    value: ElementSettings[K],
+  ) {
+    setPerElem((prev) => ({
+      ...prev,
+      [id]: { ...(prev[id] ?? DEFAULT_SETTINGS), [key]: value },
+    }));
+  }
 
   // ---- Filtered element list ----
   const filteredUnbound = useMemo(() => {
@@ -380,17 +417,24 @@ export function BindDataModal({
     }
   }
 
-  // ---- Save (batch junction creation) ----
+  // ---- Save (per-element junction creation) ----
 
-  async function handleBind(values: Record<string, unknown>) {
+  async function handleBind() {
     setSaving(true);
     setError(null);
-    const ids = [...selected];
     try {
-      for (const deId of ids) {
+      for (const deId of selected) {
+        const s = perElem[deId] ?? DEFAULT_SETTINGS;
         await new Promise<void>((resolve, reject) => {
           createSDE.mutate(
-            { ...values, step_id: stepId, data_element_id: deId },
+            {
+              step_id: stepId,
+              data_element_id: deId,
+              binding_point: s.binding_point,
+              presence:       s.presence,
+              is_key:         s.is_key,
+              quality_notes:  s.quality_notes || null,
+            },
             { onSuccess: () => resolve(), onError: reject },
           );
         });
@@ -442,7 +486,7 @@ export function BindDataModal({
             <Button
               type="button"
               disabled={selected.size === 0}
-              onClick={() => setPhase("junction")}
+              onClick={goToJunction}
             >
               Bind {selected.size > 0 ? `${selected.size} selected` : "selected"} →
             </Button>
@@ -578,12 +622,13 @@ export function BindDataModal({
     );
   }
 
-  // ---- Junction phase — set relationship fields, applied to all selected ----
+  // ---- Junction phase — per-element relationship forms ----
   return (
     <Modal
       open={open}
       onClose={onClose}
-      title="Set Step Relationship"
+      title={`Set Step Relationship · ${selectedDefs.length} element${selectedDefs.length !== 1 ? "s" : ""}`}
+      className="max-w-2xl"
       footer={
         <div className="flex w-full items-center gap-2">
           {error && <span className="mr-auto text-xs text-status-critical">{error}</span>}
@@ -594,40 +639,100 @@ export function BindDataModal({
           >
             <ArrowLeft size={13} /> Back
           </Button>
-          <Button type="submit" form="bind-form" disabled={saving}>
-            {saving ? "Binding…" : `Bind ${selected.size} element${selected.size !== 1 ? "s" : ""}`}
+          <Button type="button" disabled={saving} onClick={handleBind}>
+            {saving ? "Binding…" : `Bind ${selectedDefs.length} element${selectedDefs.length !== 1 ? "s" : ""}`}
           </Button>
         </div>
       }
     >
-      <div className="space-y-4">
-        {/* Summary of selected elements */}
-        <div className="rounded-md border border-border bg-muted/30 px-3 py-2.5">
-          <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Binding {selectedDefs.length} element{selectedDefs.length !== 1 ? "s" : ""} to this step
-          </p>
-          <div className="max-h-28 overflow-y-auto space-y-0.5">
-            {selectedDefs.map((d) => (
-              <p key={d.id} className="text-sm font-medium leading-tight">
-                {d.name}
-                {d.source_system && (
-                  <span className="ml-2 text-xs font-normal text-muted-foreground">
-                    {d.source_system}
-                    {d.table_or_view && ` · ${d.table_or_view}`}
-                  </span>
-                )}
-              </p>
-            ))}
-          </div>
-          <p className="mt-2 text-[11px] text-muted-foreground">
-            The same step-relationship settings below will be applied to all of them.
-          </p>
-        </div>
-
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-          How these elements are used at this step
+      <div className="space-y-3">
+        <p className="text-xs text-muted-foreground">
+          Set how each element is used at this step. Changes here only affect this step binding.
         </p>
-        <EntityForm formId="bind-form" fields={stepDataElementFields} onSubmit={handleBind} />
+        <div className="max-h-[60vh] space-y-2 overflow-y-auto pr-1">
+          {selectedDefs.map((d) => {
+            const s = perElem[d.id] ?? DEFAULT_SETTINGS;
+            const loc = [d.table_or_view, d.field_name].filter(Boolean).join(".");
+            return (
+              <div
+                key={d.id}
+                className="rounded-md border border-border bg-muted/20 px-3 py-3 space-y-2.5"
+              >
+                {/* Element header */}
+                <div>
+                  <p className="text-sm font-semibold leading-tight">{d.name}</p>
+                  {(d.source_system || loc) && (
+                    <p className="mt-0.5 text-[11px] text-muted-foreground">
+                      {[d.source_system, loc].filter(Boolean).join(" · ")}
+                    </p>
+                  )}
+                </div>
+
+                {/* Binding point + Presence row */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      Binding point
+                    </label>
+                    <select
+                      className="w-full rounded border border-border bg-input px-2 py-1.5 text-sm outline-none focus:ring-1 focus:ring-ring"
+                      value={s.binding_point}
+                      onChange={(e) => setElemField(d.id, "binding_point", e.target.value)}
+                    >
+                      {BINDING_POINTS.map((bp) => (
+                        <option key={bp} value={bp}>
+                          {bp.charAt(0).toUpperCase() + bp.slice(1)}
+                          {bp === "entry" ? " (source)" : " (target)"}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      Presence
+                    </label>
+                    <select
+                      className="w-full rounded border border-border bg-input px-2 py-1.5 text-sm outline-none focus:ring-1 focus:ring-ring"
+                      value={s.presence}
+                      onChange={(e) => setElemField(d.id, "presence", e.target.value)}
+                    >
+                      {PRESENCE.map((p) => (
+                        <option key={p} value={p}>
+                          {p.charAt(0).toUpperCase() + p.slice(1)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Is key + Quality notes row */}
+                <div className="grid grid-cols-[auto_1fr] items-start gap-4">
+                  <label className="flex cursor-pointer items-center gap-2 pt-1 text-sm">
+                    <input
+                      type="checkbox"
+                      className="h-3.5 w-3.5 rounded border-border"
+                      checked={s.is_key}
+                      onChange={(e) => setElemField(d.id, "is_key", e.target.checked)}
+                    />
+                    <span className="whitespace-nowrap text-xs font-medium">Key data component</span>
+                  </label>
+                  <div>
+                    <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      Quality notes
+                    </label>
+                    <textarea
+                      rows={2}
+                      className="w-full rounded border border-border bg-input px-2 py-1 text-sm outline-none focus:ring-1 focus:ring-ring"
+                      placeholder="Optional — known quality issues, transformations, gaps…"
+                      value={s.quality_notes}
+                      onChange={(e) => setElemField(d.id, "quality_notes", e.target.value)}
+                    />
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
     </Modal>
   );
