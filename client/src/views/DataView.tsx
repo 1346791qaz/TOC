@@ -49,11 +49,6 @@ export function DataView({ vsId }: { vsId: string }) {
 
   const stepIds = useMemo(() => new Set((steps.data ?? []).map((s) => s.id)), [steps.data]);
 
-  const stepOptions = useMemo(
-    () => (steps.data ?? []).map((s) => ({ value: s.id, label: s.name })),
-    [steps.data],
-  );
-
   const linkedElements = useMemo(() => {
     const vsSDEs = (allSDEs.data ?? []).filter((sde) => stepIds.has(sde.step_id));
     return linkDataElements(dataElementDefs.data ?? [], vsSDEs);
@@ -95,7 +90,7 @@ export function DataView({ vsId }: { vsId: string }) {
       actions={
         <>
           <SearchBar value={query} onChange={setQuery} placeholder="Search data…" />
-          <Button size="sm" onClick={() => setCreating(true)} disabled={stepOptions.length === 0}>
+          <Button size="sm" onClick={() => setCreating(true)}>
             <Plus size={14} /> Data element
           </Button>
         </>
@@ -153,8 +148,8 @@ export function DataView({ vsId }: { vsId: string }) {
           open
           onClose={() => setCreating(false)}
           vsId={vsId}
-          stepOptions={stepOptions}
           availableDefs={dataElementDefs.data ?? []}
+          mode="define"
         />
       )}
       {editing && (

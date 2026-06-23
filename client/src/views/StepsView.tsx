@@ -15,6 +15,7 @@ import { StepBreadcrumb } from "@/components/StepBreadcrumb";
 import { Badge, Button, Card, Select } from "@/components/ui/primitives";
 import { EntityModalForm } from "@/components/EntityModalForm";
 import { DataElementModal } from "@/components/DataElementModal";
+import { BindDataModal } from "@/components/BindDataModal";
 
 export function StepsView({ vsId }: { vsId: string }) {
   const { stepPath, setStepPath } = useUi();
@@ -405,8 +406,9 @@ function StepData({
   availableDefs: DataElement[];
 }) {
   const del = useSoftDelete("step_data_elements");
-  const [creating, setCreating] = useState(false);
-  const [editing, setEditing] = useState<LinkedDataElement | null>(null);
+  const [binding,  setBinding]  = useState(false);
+  const [defining, setDefining] = useState(false);
+  const [editing,  setEditing]  = useState<LinkedDataElement | null>(null);
 
   const alreadyBoundIds = useMemo(
     () => new Set(linkedElements.map((d) => d.data_element_id)),
@@ -419,7 +421,7 @@ function StepData({
         <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
           Data Elements
         </p>
-        <Button size="sm" variant="subtle" onClick={() => setCreating(true)}>
+        <Button size="sm" variant="subtle" onClick={() => setBinding(true)}>
           <Plus size={12} /> Bind data
         </Button>
       </div>
@@ -445,16 +447,29 @@ function StepData({
         )}
       </div>
 
-      {creating && (
+      {/* New DBeaver-style two-panel bind picker */}
+      <BindDataModal
+        open={binding}
+        onClose={() => setBinding(false)}
+        vsId={vsId}
+        stepId={step.id}
+        stepName={step.name}
+        availableDefs={availableDefs}
+        alreadyBoundIds={alreadyBoundIds}
+        onDefineNew={() => { setBinding(false); setDefining(true); }}
+      />
+      {/* "Define new element" shortcut — opens the catalog form */}
+      {defining && (
         <DataElementModal
           open
-          onClose={() => setCreating(false)}
+          onClose={() => { setDefining(false); setBinding(true); }}
           vsId={vsId}
           stepId={step.id}
           availableDefs={availableDefs}
-          alreadyBoundIds={alreadyBoundIds}
+          mode="define"
         />
       )}
+      {/* Edit existing binding */}
       {editing && (
         <DataElementModal
           open

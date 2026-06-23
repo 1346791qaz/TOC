@@ -6,6 +6,7 @@ export type ViewKey =
   | "steps"
   | "personas"
   | "data"
+  | "connections"
   | "gaps"
   | "constraints"
   | "candidates"
