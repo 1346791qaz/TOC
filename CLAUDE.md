@@ -105,6 +105,32 @@ Before committing, always:
 
 ---
 
+## E2E Test Structure
+
+The `e2e/` folder is modular:
+
+| File | Purpose |
+|---|---|
+| `helpers.ts` | Shared utilities: `gotoApp`, `nav`, `confirmDialog` |
+| `oil.spec.ts` | Full serial regression walk-through of every feature (runs in order) |
+| `data-elements.spec.ts` | Focused tests for Data Elements: catalog section, catalog edit, BindDataModal tabs |
+| `delete-confirm.spec.ts` | Regression for the ConfirmDialog delete pattern (No cancels / Yes deletes) |
+
+**Rules for new tests:**
+- Add a new spec file (e.g. `metrics.spec.ts`) for any major feature area — don't pile everything into `oil.spec.ts`.
+- Use `test.describe.configure({ mode: "serial" })` in every spec file so tests in that file run in order.
+- Import `gotoApp`, `nav`, and `confirmDialog` from `./helpers` — never redefine them inline.
+- Each spec file must be self-contained: create any data it needs, don't depend on data created by other spec files.
+- After any change that affects delete behavior, ConfirmDialog wiring, or a modal form: add or update a test in the relevant spec file.
+- The `confirmDialog(page)` helper in `helpers.ts` clicks "Yes" in the styled ConfirmDialog modal. Use it whenever testing a delete flow — do NOT use `page.on("dialog", ...)` (native confirm is gone).
+
+**Key test IDs to know:**
+- `data-testid="modal"` — any open Modal/ConfirmDialog
+- `data-testid="field-{fieldName}"` — form inputs rendered by EntityForm
+- `data-testid="cf-{fieldName}"` — ConstraintForm-specific inputs
+
+---
+
 ## Things That Always Need My Approval First
 
 - Deleting any file

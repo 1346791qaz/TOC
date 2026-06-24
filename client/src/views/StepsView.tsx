@@ -13,6 +13,7 @@ import { buildStepPath, childCountByParent, stepsAtLevel } from "./canvas/hierar
 import { ViewShell, EmptyHint } from "@/components/ViewShell";
 import { StepBreadcrumb } from "@/components/StepBreadcrumb";
 import { Badge, Button, Card, Select } from "@/components/ui/primitives";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { EntityModalForm } from "@/components/EntityModalForm";
 import { DataElementModal } from "@/components/DataElementModal";
 import { BindDataModal } from "@/components/BindDataModal";
@@ -31,6 +32,7 @@ export function StepsView({ vsId }: { vsId: string }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editing, setEditing] = useState<ProcessStep | null>(null);
   const [creating, setCreating] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const del = useSoftDelete("process_steps");
 
   const allSteps = steps.data ?? [];
@@ -117,12 +119,7 @@ export function StepsView({ vsId }: { vsId: string }) {
               onEdit={() => setEditing(selected)}
               onDrill={() => drillInto(selected.id)}
               onDrillChild={(childId) => drillInto(childId)}
-              onDelete={() => {
-                if (confirm("Move step to Trash?")) {
-                  del.mutate(selected.id);
-                  setSelectedId(null);
-                }
-              }}
+              onDelete={() => setConfirmingDelete(true)}
             />
           ) : (
             <EmptyHint>Select a step.</EmptyHint>
@@ -148,6 +145,15 @@ export function StepsView({ vsId }: { vsId: string }) {
           initial={editing}
         />
       )}
+
+      <ConfirmDialog
+        open={confirmingDelete && selected !== null}
+        onClose={() => setConfirmingDelete(false)}
+        onConfirm={() => {
+          if (selected) { del.mutate(selected.id); setSelectedId(null); }
+        }}
+        message={`Move "${selected?.name ?? ""}" to Trash? It can be restored later.`}
+      />
     </ViewShell>
   );
 }

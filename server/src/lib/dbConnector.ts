@@ -24,6 +24,12 @@ export interface TestResult {
   note?: string;
 }
 
+export interface PreviewResult {
+  columns: string[];
+  rows: unknown[][];
+  truncated: boolean;
+}
+
 // ---------------------------------------------------------------------------
 // Shared helpers
 // ---------------------------------------------------------------------------
@@ -119,6 +125,22 @@ async function pgColumns(conn: DbConnection, schema: string, table: string): Pro
   }
 }
 
+async function pgPreview(conn: DbConnection, schema: string, table: string): Promise<PreviewResult> {
+  const { Client } = await import("pg");
+  const client = new Client(buildPgConfig(conn));
+  await client.connect();
+  try {
+    const s = schema.replace(/"/g, '""');
+    const t = table.replace(/"/g, '""');
+    const res = await client.query(`SELECT * FROM "${s}"."${t}" LIMIT 101`);
+    const columns = res.fields.map((f) => f.name);
+    const truncated = res.rows.length > 100;
+    return { columns, rows: res.rows.slice(0, 100).map((row) => columns.map((col) => row[col] ?? null)), truncated };
+  } finally {
+    await client.end().catch(() => {});
+  }
+}
+
 function buildPgConfig(conn: DbConnection) {
   const extras = tryParseJson(conn.extra_options);
   const defaultPort = conn.driver_type === "redshift" ? 5439 : 5432;
@@ -201,6 +223,21 @@ async function mysqlColumns(conn: DbConnection, schema: string, table: string): 
         r["numeric_scale"] != null ? Number(r["numeric_scale"]) : null,
       ),
     }));
+  } finally {
+    await connection.end().catch(() => {});
+  }
+}
+
+async function mysqlPreview(conn: DbConnection, schema: string, table: string): Promise<PreviewResult> {
+  const mysql = await import("mysql2/promise");
+  const connection = await mysql.createConnection(buildMysqlConfig(conn));
+  try {
+    const s = schema.replace(/`/g, "``");
+    const t = table.replace(/`/g, "``");
+    const [rawRows, fields] = await connection.query(`SELECT * FROM \`${s}\`.\`${t}\` LIMIT 101`) as [Array<Record<string, unknown>>, Array<{ name: string }>];
+    const columns = fields.map((f) => f.name);
+    const truncated = rawRows.length > 100;
+    return { columns, rows: rawRows.slice(0, 100).map((row) => columns.map((col) => row[col] ?? null)), truncated };
   } finally {
     await connection.end().catch(() => {});
   }
@@ -296,6 +333,22 @@ async function mssqlColumns(conn: DbConnection, schema: string, table: string): 
   }
 }
 
+async function mssqlPreview(conn: DbConnection, schema: string, table: string): Promise<PreviewResult> {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const mssql = require("mssql") as typeof import("mssql");
+  const pool = await mssql.connect(buildMssqlConfig(conn));
+  try {
+    const s = schema.replace(/]/g, "]]");
+    const t = table.replace(/]/g, "]]");
+    const result = await pool.request().query(`SELECT TOP 101 * FROM [${s}].[${t}]`);
+    const columns = Object.keys(result.recordset.columns ?? (result.recordset[0] ?? {}));
+    const truncated = result.recordset.length > 100;
+    return { columns, rows: result.recordset.slice(0, 100).map((row) => columns.map((col) => row[col] ?? null)), truncated };
+  } finally {
+    await pool.close().catch(() => {});
+  }
+}
+
 function buildMssqlConfig(conn: DbConnection) {
   return {
     server: conn.host ?? "localhost",
@@ -368,6 +421,25 @@ async function oracleColumns(conn: DbConnection, schema: string, table: string):
       is_nullable: r[2] === "Y", column_default: r[3] ?? null,
       length: fmtLength(r[4] && r[4] > 0 ? r[4] : null, r[5], r[6]),
     }));
+  } finally {
+    await connection.close().catch(() => {});
+  }
+}
+
+async function oraclePreview(conn: DbConnection, schema: string, table: string): Promise<PreviewResult> {
+  const oracledb = await import("oracledb");
+  const connection = await oracledb.getConnection(buildOracleConfig(conn));
+  try {
+    const s = schema.toUpperCase().replace(/"/g, '""');
+    const t = table.toUpperCase().replace(/"/g, '""');
+    const result = await connection.execute(
+      `SELECT * FROM "${s}"."${t}" FETCH FIRST 101 ROWS ONLY`,
+      [], { outFormat: oracledb.OUT_FORMAT_ARRAY },
+    );
+    const columns = (result.metaData ?? []).map((m) => m.name);
+    const rawRows = (result.rows as unknown[][] | undefined) ?? [];
+    const truncated = rawRows.length > 100;
+    return { columns, rows: rawRows.slice(0, 100), truncated };
   } finally {
     await connection.close().catch(() => {});
   }
@@ -450,6 +522,15 @@ async function hanaColumns(conn: DbConnection, schema: string, table: string): P
     is_nullable: str(r["IS_NULLABLE"]) === "TRUE", column_default: r["DEFAULT_VALUE"] != null ? str(r["DEFAULT_VALUE"]) : null,
     length: r["LENGTH"] != null ? str(r["LENGTH"]) : null,
   }));
+}
+
+async function hanaPreview(conn: DbConnection, schema: string, table: string): Promise<PreviewResult> {
+  const s = schema.replace(/"/g, '""');
+  const t = table.replace(/"/g, '""');
+  const rows = await hanaQuery<Record<string, unknown>>(conn, `SELECT * FROM "${s}"."${t}" LIMIT 101`);
+  const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
+  const truncated = rows.length > 100;
+  return { columns, rows: rows.slice(0, 100).map((row) => columns.map((col) => row[col] ?? null)), truncated };
 }
 
 function buildHanaConfig(conn: DbConnection): Record<string, unknown> {
@@ -536,6 +617,32 @@ function flattenMongoDoc(obj: Record<string, unknown>, prefix: string, out: Map<
     if (v !== null && typeof v === "object" && !Array.isArray(v) && Object.keys(v).length < 10) {
       flattenMongoDoc(v as Record<string, unknown>, key, out);
     }
+  }
+}
+
+async function mongoPreview(conn: DbConnection, schema: string, table: string): Promise<PreviewResult> {
+  const { MongoClient } = await import("mongodb");
+  const client = new MongoClient(buildMongoUri(conn), { serverSelectionTimeoutMS: 8000 });
+  await client.connect();
+  try {
+    const docs = await client.db(schema).collection(table)
+      .find({}, { projection: { _id: 0 } }).limit(101).toArray();
+    const keySet = new Set<string>();
+    for (const doc of docs) { for (const k of Object.keys(doc)) keySet.add(k); }
+    const columns = Array.from(keySet);
+    const truncated = docs.length > 100;
+    return {
+      columns,
+      rows: docs.slice(0, 100).map((doc) =>
+        columns.map((col) => {
+          const v = doc[col];
+          return v === undefined ? null : typeof v === "object" && v !== null ? JSON.stringify(v) : v;
+        }),
+      ),
+      truncated,
+    };
+  } finally {
+    await client.close().catch(() => {});
   }
 }
 
@@ -636,6 +743,10 @@ async function influxColumns(conn: DbConnection, schema: string, table: string):
   }));
 }
 
+async function influxPreview(): Promise<PreviewResult> {
+  throw new Error("InfluxDB content preview is not supported.");
+}
+
 function buildInfluxConfig(conn: DbConnection) {
   return {
     url: conn.host ?? "http://localhost:8086",
@@ -706,6 +817,22 @@ async function cassandraColumns(conn: DbConnection, schema: string, table: strin
       column_name: r["column_name"] as string, data_type: r["type"] as string,
       is_nullable: true, column_default: null, length: null,
     }));
+  } finally {
+    await client.shutdown().catch(() => {});
+  }
+}
+
+async function cassandraPreview(conn: DbConnection, schema: string, table: string): Promise<PreviewResult> {
+  const cassandra = await import("cassandra-driver");
+  const client = new cassandra.Client(buildCassandraConfig(conn));
+  await client.connect();
+  try {
+    const s = schema.replace(/"/g, '""');
+    const t = table.replace(/"/g, '""');
+    const result = await client.execute(`SELECT * FROM "${s}"."${t}" LIMIT 101`);
+    const columns = (result.columns ?? []).map((c) => c.name);
+    const truncated = result.rows.length > 100;
+    return { columns, rows: result.rows.slice(0, 100).map((row) => columns.map((col) => row[col] ?? null)), truncated };
   } finally {
     await client.shutdown().catch(() => {});
   }
@@ -834,6 +961,29 @@ async function snowflakeColumns(conn: DbConnection, schema: string, table: strin
   });
 }
 
+async function snowflakePreview(conn: DbConnection, schema: string, table: string): Promise<PreviewResult> {
+  const snowflake = await import("snowflake-sdk");
+  const s = schema.replace(/"/g, '""');
+  const t = table.replace(/"/g, '""');
+  return new Promise((resolve, reject) => {
+    const sfConn = snowflake.createConnection(buildSnowflakeConfig(conn));
+    sfConn.connect((err) => {
+      if (err) { reject(err); return; }
+      sfConn.execute({
+        sqlText: `SELECT * FROM "${s}"."${t}" LIMIT 101`,
+        complete: (execErr, _stmt, rows) => {
+          sfConn.destroy(() => {});
+          if (execErr) { reject(execErr); return; }
+          const r = (rows ?? []) as Array<Record<string, unknown>>;
+          const columns = r.length > 0 ? Object.keys(r[0]) : [];
+          const truncated = r.length > 100;
+          resolve({ columns, rows: r.slice(0, 100).map((row) => columns.map((col) => row[col] ?? null)), truncated });
+        },
+      });
+    });
+  });
+}
+
 function buildSnowflakeConfig(conn: DbConnection) {
   const extras = tryParseJson(conn.extra_options);
   return {
@@ -931,40 +1081,43 @@ type Dispatcher = {
   schemas: (c: DbConnection) => Promise<SchemaInfo[]>;
   tables: (c: DbConnection, schema: string) => Promise<TableInfo[]>;
   columns: (c: DbConnection, schema: string, table: string) => Promise<ColumnInfo[]>;
+  preview: (c: DbConnection, schema: string, table: string) => Promise<PreviewResult>;
 };
 
 const noSchema = (msg: string) => async (): Promise<never> => { throw new Error(msg); };
+const noPreview = (msg: string) => async (): Promise<never> => { throw new Error(msg); };
 
 const DRIVERS: Record<DbDriverType, Dispatcher> = {
   // ---- SQL (native implementations) ----
-  postgresql: { test: pgTest, schemas: pgSchemas, tables: pgTables, columns: pgColumns },
-  mysql:      { test: mysqlTest, schemas: mysqlSchemas, tables: mysqlTables, columns: mysqlColumns },
-  mssql:      { test: mssqlTest, schemas: mssqlSchemas, tables: mssqlTables, columns: mssqlColumns },
-  oracle:     { test: oracleTest, schemas: oracleSchemas, tables: oracleTables, columns: oracleColumns },
-  hana:       { test: hanaTest, schemas: hanaSchemas, tables: hanaTables, columns: hanaColumns },
+  postgresql: { test: pgTest, schemas: pgSchemas, tables: pgTables, columns: pgColumns, preview: pgPreview },
+  mysql:      { test: mysqlTest, schemas: mysqlSchemas, tables: mysqlTables, columns: mysqlColumns, preview: mysqlPreview },
+  mssql:      { test: mssqlTest, schemas: mssqlSchemas, tables: mssqlTables, columns: mssqlColumns, preview: mssqlPreview },
+  oracle:     { test: oracleTest, schemas: oracleSchemas, tables: oracleTables, columns: oracleColumns, preview: oraclePreview },
+  hana:       { test: hanaTest, schemas: hanaSchemas, tables: hanaTables, columns: hanaColumns, preview: hanaPreview },
   // ---- SQL aliases (reuse existing drivers) ----
-  redshift:    { test: pgTest, schemas: pgSchemas, tables: pgTables, columns: pgColumns },
-  timescaledb: { test: pgTest, schemas: pgSchemas, tables: pgTables, columns: pgColumns },
-  "azure-sql": { test: mssqlTest, schemas: mssqlSchemas, tables: mssqlTables, columns: mssqlColumns },
-  mariadb:     { test: mysqlTest, schemas: mysqlSchemas, tables: mysqlTables, columns: mysqlColumns },
+  redshift:    { test: pgTest, schemas: pgSchemas, tables: pgTables, columns: pgColumns, preview: pgPreview },
+  timescaledb: { test: pgTest, schemas: pgSchemas, tables: pgTables, columns: pgColumns, preview: pgPreview },
+  "azure-sql": { test: mssqlTest, schemas: mssqlSchemas, tables: mssqlTables, columns: mssqlColumns, preview: mssqlPreview },
+  mariadb:     { test: mysqlTest, schemas: mysqlSchemas, tables: mysqlTables, columns: mysqlColumns, preview: mysqlPreview },
   // ---- Requires optional native packages ----
-  db2: { test: db2Test, schemas: db2NotAvailable, tables: db2NotAvailable as unknown as Dispatcher["tables"], columns: db2NotAvailable as unknown as Dispatcher["columns"] },
-  odbc: { test: odbcTest, schemas: noSchema("ODBC connections do not support schema browsing."), tables: noSchema("ODBC connections do not support schema browsing."), columns: noSchema("ODBC connections do not support schema browsing.") },
-  bigquery: { test: bigqueryTest, schemas: bigqueryNotAvailable, tables: bigqueryNotAvailable as unknown as Dispatcher["tables"], columns: bigqueryNotAvailable as unknown as Dispatcher["columns"] },
+  db2:      { test: db2Test, schemas: db2NotAvailable, tables: db2NotAvailable as unknown as Dispatcher["tables"], columns: db2NotAvailable as unknown as Dispatcher["columns"], preview: noPreview("DB2 content preview requires the ibm_db package.") as unknown as Dispatcher["preview"] },
+  odbc:     { test: odbcTest, schemas: noSchema("ODBC connections do not support schema browsing."), tables: noSchema("ODBC connections do not support schema browsing."), columns: noSchema("ODBC connections do not support schema browsing."), preview: noPreview("ODBC content preview is not supported.") as unknown as Dispatcher["preview"] },
+  bigquery: { test: bigqueryTest, schemas: bigqueryNotAvailable, tables: bigqueryNotAvailable as unknown as Dispatcher["tables"], columns: bigqueryNotAvailable as unknown as Dispatcher["columns"], preview: noPreview("BigQuery content preview requires the @google-cloud/bigquery package.") as unknown as Dispatcher["preview"] },
   // ---- Cloud / Warehouse ----
-  snowflake: { test: snowflakeTest, schemas: snowflakeSchemas, tables: snowflakeTables, columns: snowflakeColumns },
+  snowflake: { test: snowflakeTest, schemas: snowflakeSchemas, tables: snowflakeTables, columns: snowflakeColumns, preview: snowflakePreview },
   // ---- Time Series ----
-  influxdb: { test: influxTest, schemas: influxSchemas, tables: influxTables, columns: influxColumns },
+  influxdb: { test: influxTest, schemas: influxSchemas, tables: influxTables, columns: influxColumns, preview: influxPreview },
   // ---- NoSQL ----
-  mongodb:   { test: mongoTest, schemas: mongoSchemas, tables: mongoTables, columns: mongoColumns },
-  cassandra: { test: cassandraTest, schemas: cassandraSchemas, tables: cassandraTables, columns: cassandraColumns },
-  redis:     { test: redisTest, schemas: noSchema("Redis is a key-value store — schema browsing is not applicable."), tables: noSchema("Redis is a key-value store."), columns: noSchema("Redis is a key-value store.") },
+  mongodb:   { test: mongoTest, schemas: mongoSchemas, tables: mongoTables, columns: mongoColumns, preview: mongoPreview },
+  cassandra: { test: cassandraTest, schemas: cassandraSchemas, tables: cassandraTables, columns: cassandraColumns, preview: cassandraPreview },
+  redis:     { test: redisTest, schemas: noSchema("Redis is a key-value store — schema browsing is not applicable."), tables: noSchema("Redis is a key-value store."), columns: noSchema("Redis is a key-value store."), preview: noPreview("Redis is a key-value store — content preview is not applicable.") as unknown as Dispatcher["preview"] },
   // ---- Catch-all ----
   other: {
     test: async () => ({ ok: false, latency_ms: 0, error: "Generic connections do not support live testing. Save for documentation purposes." }),
     schemas: noSchema("Generic connections do not support schema browsing."),
     tables: noSchema("Generic connections do not support schema browsing."),
     columns: noSchema("Generic connections do not support schema browsing."),
+    preview: noPreview("Generic connections do not support content preview.") as unknown as Dispatcher["preview"],
   },
 };
 
@@ -989,4 +1142,10 @@ export function listColumns(conn: DbConnection, schema: string, table: string): 
   const driver = DRIVERS[conn.driver_type as DbDriverType];
   if (!driver) throw new Error(`Unknown driver: ${conn.driver_type}`);
   return driver.columns(conn, schema, table);
+}
+
+export function previewRows(conn: DbConnection, schema: string, table: string): Promise<PreviewResult> {
+  const driver = DRIVERS[conn.driver_type as DbDriverType];
+  if (!driver) throw new Error(`Unknown driver: ${conn.driver_type}`);
+  return driver.preview(conn, schema, table);
 }

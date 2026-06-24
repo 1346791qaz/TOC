@@ -302,17 +302,19 @@ export function BindDataModal({
   const connections = useList<DbConnection>("db_connections", { where: { value_stream_id: vsId } });
   const createSDE   = useCreate("step_data_elements");
 
-  const [phase,    setPhase]    = useState<Phase>("browse");
-  const [filter,   setFilter]   = useState<FilterState>({ type: "all" });
-  const [search,   setSearch]   = useState("");
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [perElem,  setPerElem]  = useState<Record<string, ElementSettings>>({});
-  const [error,    setError]    = useState<string | null>(null);
-  const [saving,   setSaving]   = useState(false);
+  const [phase,     setPhase]     = useState<Phase>("browse");
+  const [leftMode,  setLeftMode]  = useState<"connections" | "catalog">("connections");
+  const [filter,    setFilter]    = useState<FilterState>({ type: "all" });
+  const [search,    setSearch]    = useState("");
+  const [selected,  setSelected]  = useState<Set<string>>(new Set());
+  const [perElem,   setPerElem]   = useState<Record<string, ElementSettings>>({});
+  const [error,     setError]     = useState<string | null>(null);
+  const [saving,    setSaving]    = useState(false);
 
   useEffect(() => {
     if (open) {
       setPhase("browse");
+      setLeftMode("connections");
       setFilter({ type: "all" });
       setSearch("");
       setSelected(new Set());
@@ -496,15 +498,50 @@ export function BindDataModal({
         {/* Two-panel layout */}
         <div className="flex h-[52vh] gap-0 overflow-hidden rounded-md border border-border">
           {/* Left: Navigator */}
-          <div className="w-52 shrink-0 overflow-y-auto border-r border-border bg-muted/20 px-1">
-            <p className="sticky top-0 bg-muted/20 px-2 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Connections
-            </p>
-            <FilterNav
-              connections={connections.data ?? []}
-              filter={filter}
-              setFilter={(f) => { setFilter(f); setSearch(""); }}
-            />
+          <div className="w-52 shrink-0 flex flex-col border-r border-border bg-muted/20">
+            {/* Tab toggle */}
+            <div className="flex shrink-0 border-b border-border">
+              <button
+                type="button"
+                onClick={() => setLeftMode("connections")}
+                className={cn(
+                  "flex-1 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider transition-colors",
+                  leftMode === "connections"
+                    ? "bg-primary/10 text-foreground"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                Connections
+              </button>
+              <button
+                type="button"
+                onClick={() => { setLeftMode("catalog"); setFilter({ type: "all" }); setSearch(""); }}
+                className={cn(
+                  "flex-1 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider transition-colors",
+                  leftMode === "catalog"
+                    ? "bg-primary/10 text-foreground"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                Catalog
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto px-1">
+              {leftMode === "connections" ? (
+                <FilterNav
+                  connections={connections.data ?? []}
+                  filter={filter}
+                  setFilter={(f) => { setFilter(f); setSearch(""); }}
+                />
+              ) : (
+                <div className="py-2 px-1">
+                  <p className="px-1 pb-1 text-[10px] text-muted-foreground">
+                    All {availableDefs.filter(d => !alreadyBoundIds.has(d.id)).length} unbound elements shown.
+                    Select in the list on the right.
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Right: Element list */}

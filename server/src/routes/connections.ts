@@ -1,6 +1,18 @@
 import { Router } from "express";
 import { repos } from "../repositories/index";
-import { testConnection, listSchemas, listTables, listColumns } from "../lib/dbConnector";
+import { testConnection, listSchemas, listTables, listColumns, previewRows } from "../lib/dbConnector";
+import type { ColumnInfo } from "../lib/dbConnector";
+
+function buildDdl(schema: string, table: string, columns: ColumnInfo[]): string {
+  const lines = columns.map((col) => {
+    let def = `  "${col.column_name}" ${col.data_type}`;
+    if (col.length) def += `(${col.length})`;
+    if (!col.is_nullable) def += " NOT NULL";
+    if (col.column_default !== null) def += ` DEFAULT ${col.column_default}`;
+    return def;
+  });
+  return `CREATE TABLE "${schema}"."${table}" (\n${lines.join(",\n")}\n);`;
+}
 
 export function connectionsRouter(): Router {
   const router = Router();
@@ -48,6 +60,31 @@ export function connectionsRouter(): Router {
       if (!conn) { res.status(404).json({ error: "Connection not found" }); return; }
       const columns = await listColumns(conn, req.params.schema, req.params.table);
       res.json(columns);
+    } catch (e) {
+      res.status(500).json({ error: String(e) });
+    }
+  });
+
+  // GET /api/db_connections/:id/schema/:schema/tables/:table/ddl — approximate CREATE TABLE DDL
+  router.get("/:id/schema/:schema/tables/:table/ddl", async (req, res) => {
+    try {
+      const conn = repos.db_connections.get(req.params.id);
+      if (!conn) { res.status(404).json({ error: "Connection not found" }); return; }
+      const columns = await listColumns(conn, req.params.schema, req.params.table);
+      const ddl = buildDdl(req.params.schema, req.params.table, columns);
+      res.json({ ddl });
+    } catch (e) {
+      res.status(500).json({ error: String(e) });
+    }
+  });
+
+  // GET /api/db_connections/:id/schema/:schema/tables/:table/preview — first 100 rows
+  router.get("/:id/schema/:schema/tables/:table/preview", async (req, res) => {
+    try {
+      const conn = repos.db_connections.get(req.params.id);
+      if (!conn) { res.status(404).json({ error: "Connection not found" }); return; }
+      const result = await previewRows(conn, req.params.schema, req.params.table);
+      res.json(result);
     } catch (e) {
       res.status(500).json({ error: String(e) });
     }
