@@ -227,6 +227,7 @@ export function DataView({ vsId }: { vsId: string }) {
           vsId={vsId}
           availableDefs={dataElementDefs.data ?? []}
           initial={editing}
+          mode="define"
         />
       )}
     </ViewShell>

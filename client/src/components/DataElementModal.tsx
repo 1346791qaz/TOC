@@ -447,6 +447,13 @@ export function DataElementModal({
 
   const handleEdit = (values: Record<string, unknown>) => {
     setError(null);
+    if (mode === "define") {
+      updateDE.mutate(
+        { id: initial!.data_element_id, data: values },
+        { onSuccess: onClose, onError: onErr },
+      );
+      return;
+    }
     const defValues: Record<string, unknown> = {};
     const usageValues: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(values)) {
@@ -469,6 +476,7 @@ export function DataElementModal({
 
   // ---- Edit mode ----
   if (isEdit && initial) {
+    const editFields = mode === "define" ? dataElementFields : EDIT_FIELDS;
     const combinedInitial: Record<string, unknown> = {
       name: initial.name,
       business_description: initial.business_description,
@@ -500,7 +508,7 @@ export function DataElementModal({
       >
         <EntityForm
           formId="de-form"
-          fields={EDIT_FIELDS}
+          fields={editFields}
           initial={combinedInitial}
           onSubmit={handleEdit}
         />
