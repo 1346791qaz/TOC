@@ -3,7 +3,7 @@ import { ArrowRight, Database, Layers, Pencil, Plus, X } from "lucide-react";
 import type { LinkedDataElement } from "@shared/gaps";
 import type { DataElement, Persona, ProcessStep, StepDataElement, StepPersona, ValueStream } from "@shared/schemas";
 import { linkDataElements } from "@shared/gaps";
-import { RACI_ROLES } from "@shared/enums";
+import { BINDING_POINTS, RACI_ROLES } from "@shared/enums";
 import { useCreate, useList, useSoftDelete } from "@/lib/queries";
 import { processStepFields } from "@/lib/entityConfig";
 import { useUi } from "@/store";
@@ -416,10 +416,36 @@ function StepData({
   const [defining, setDefining] = useState(false);
   const [editing,  setEditing]  = useState<LinkedDataElement | null>(null);
 
-  const alreadyBoundIds = useMemo(
-    () => new Set(linkedElements.map((d) => d.data_element_id)),
-    [linkedElements],
-  );
+  // Track which binding points are already used per data element.
+  const usedBindingPoints = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    for (const d of linkedElements) {
+      const pts = map.get(d.data_element_id) ?? new Set<string>();
+      pts.add(d.binding_point);
+      map.set(d.data_element_id, pts);
+    }
+    return map;
+  }, [linkedElements]);
+
+  // An element is "fully bound" only when all 3 binding points are occupied.
+  const alreadyBoundIds = useMemo(() => {
+    const fully = new Set<string>();
+    for (const [id, pts] of usedBindingPoints) {
+      if (pts.size >= BINDING_POINTS.length) fully.add(id);
+    }
+    return fully;
+  }, [usedBindingPoints]);
+
+  // Group junction rows by data_element_id so each element shows one visual row.
+  const groupedElements = useMemo(() => {
+    const map = new Map<string, LinkedDataElement[]>();
+    for (const d of linkedElements) {
+      const arr = map.get(d.data_element_id) ?? [];
+      arr.push(d);
+      map.set(d.data_element_id, arr);
+    }
+    return [...map.values()];
+  }, [linkedElements]);
 
   return (
     <Card>
@@ -432,28 +458,47 @@ function StepData({
         </Button>
       </div>
       <div className="space-y-1">
-        {linkedElements.map((d) => (
-          <div key={d.id} className="flex items-center gap-2 rounded bg-muted/40 px-2 py-1 text-sm">
-            <Badge>{d.binding_point}</Badge>
-            <span className="font-medium">{d.name}</span>
-            {d.is_key && <Badge tone="accent">key</Badge>}
-            <Badge tone={presenceTone[d.presence]}>{d.presence}</Badge>
-            <span className="ml-auto flex gap-1">
-              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setEditing(d)}>
-                <Pencil size={11} />
-              </Button>
-              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => del.mutate(d.id)}>
-                <X size={12} />
-              </Button>
-            </span>
-          </div>
-        ))}
+        {groupedElements.map((group) => {
+          const first = group[0];
+          return (
+            <div key={first.data_element_id} className="flex items-center gap-1.5 rounded bg-muted/40 px-2 py-1 text-sm">
+              <div className="flex shrink-0 flex-wrap gap-0.5">
+                {group.map((d) => <Badge key={d.id}>{d.binding_point}</Badge>)}
+              </div>
+              <span className="min-w-0 flex-1 truncate font-medium">{first.name}</span>
+              {first.is_key && <Badge tone="accent">key</Badge>}
+              <Badge tone={presenceTone[first.presence]}>{first.presence}</Badge>
+              <span className="ml-auto flex shrink-0 gap-1">
+                {group.map((d) => (
+                  <Button
+                    key={d.id}
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    title={`Edit ${d.binding_point} binding`}
+                    onClick={() => setEditing(d)}
+                  >
+                    <Pencil size={11} />
+                  </Button>
+                ))}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  onClick={() => group.forEach((d) => del.mutate(d.id))}
+                >
+                  <X size={12} />
+                </Button>
+              </span>
+            </div>
+          );
+        })}
         {linkedElements.length === 0 && (
           <p className="text-xs text-muted-foreground">No data bound to this step.</p>
         )}
       </div>
 
-      {/* New DBeaver-style two-panel bind picker */}
+      {/* Two-panel bind picker */}
       <BindDataModal
         open={binding}
         onClose={() => setBinding(false)}
@@ -462,6 +507,7 @@ function StepData({
         stepName={step.name}
         availableDefs={availableDefs}
         alreadyBoundIds={alreadyBoundIds}
+        usedBindingPoints={usedBindingPoints}
         onDefineNew={() => { setBinding(false); setDefining(true); }}
       />
       {/* "Define new element" shortcut — opens the catalog form */}
