@@ -1,5 +1,6 @@
 import {
   ENTITIES,
+  type Artifact,
   type Assumption,
   type Constraint,
   type DataElement,
@@ -10,6 +11,7 @@ import {
   type Metric,
   type Persona,
   type ProcessStep,
+  type StepArtifact,
   type StepDataElement,
   type StepPersona,
   type ValueStream,
@@ -27,6 +29,8 @@ export interface RepoMap {
   step_personas: Repository<StepPersona>;
   data_elements: Repository<DataElement>;
   step_data_elements: Repository<StepDataElement>;
+  artifacts: Repository<Artifact>;
+  step_artifacts: Repository<StepArtifact>;
   constraints: Repository<Constraint>;
   flow_edges: Repository<FlowEdge>;
   db_connections: Repository<DbConnection>;

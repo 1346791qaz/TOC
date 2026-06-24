@@ -5,6 +5,7 @@ import {
   Boxes,
   Command,
   Database,
+  FileStack,
   GitBranch,
   ListChecks,
   Network,
@@ -34,6 +35,7 @@ import { TrashView } from "./views/TrashView";
 import { IoView } from "./views/IoView";
 import { CanvasView } from "./views/CanvasView";
 import { ConnectionsView } from "./views/ConnectionsView";
+import { ArtifactsView } from "./views/ArtifactsView";
 
 export interface NavItem {
   view: ViewKey;
@@ -50,6 +52,7 @@ export const NAV: NavItem[] = [
   { view: "steps", label: "Process Steps", icon: Workflow, group: "model" },
   { view: "personas", label: "Personas", icon: Users, group: "model" },
   { view: "data", label: "Data Elements", icon: Database, group: "model" },
+  { view: "artifacts", label: "Artifacts", icon: FileStack, group: "model" },
   { view: "connections", label: "DB Connections", icon: PlugZap, group: "model" },
   { view: "constraints", label: "Constraint Register", icon: ListChecks, group: "model" },
   { view: "metrics", label: "Metrics", icon: Boxes, group: "model" },
@@ -156,6 +159,8 @@ function ViewRouter({
       return <PersonasView vsId={valueStreamId} />;
     case "data":
       return <DataView vsId={valueStreamId} />;
+    case "artifacts":
+      return <ArtifactsView vsId={valueStreamId} />;
     case "connections":
       return <ConnectionsView vsId={valueStreamId} />;
     case "constraints":

@@ -1,10 +1,12 @@
 import type { Edge, Node } from "@xyflow/react";
 import type { LinkedDataElement } from "@shared/gaps";
 import type {
+  Artifact,
   Constraint,
   FlowEdge,
   Persona,
   ProcessStep,
+  StepArtifact,
   StepPersona,
 } from "@shared/schemas";
 import { severityRank } from "@/lib/display";
@@ -27,6 +29,7 @@ const CELL_W = 200;
 const CELL_X = (STEP_W - CELL_W) / 2;
 const PERSONA_H = 48;
 const DATA_H = 44;
+const ARTIFACT_H = 40;
 const CELL_GAP = 8;
 const SECTION_GAP = 16;
 const BAND_GAP = 26; // gap between a step's cells and its sub-step band
@@ -73,6 +76,8 @@ const GRAY: DomainColor = {
   text: "hsl(215 14% 70%)",
 };
 
+export type StepArtifactLink = StepArtifact & { artifact: Artifact };
+
 export interface AttachedInput {
   steps: ProcessStep[];
   personas: Persona[];
@@ -80,7 +85,8 @@ export interface AttachedInput {
   stepPersonas: StepPersona[];
   constraints: Constraint[];
   edges: FlowEdge[];
-  layers: { personas: boolean; data: boolean; constraints: boolean };
+  stepArtifacts: StepArtifactLink[];
+  layers: { personas: boolean; data: boolean; constraints: boolean; artifacts: boolean };
   expanded: Set<string>;
 }
 
@@ -88,7 +94,7 @@ export function buildAttachedGraph(input: AttachedInput): {
   nodes: Node<OilNodeData>[];
   edges: Edge[];
 } {
-  const { steps, personas, dataElements, stepPersonas, constraints, edges, layers, expanded } =
+  const { steps, personas, dataElements, stepPersonas, constraints, edges, stepArtifacts, layers, expanded } =
     input;
 
   const personaById = new Map(personas.map((p) => [p.id, p]));
@@ -260,6 +266,29 @@ export function buildAttachedGraph(input: AttachedInput): {
           data: { label: d.name, nodeKind: "data_element", entityId: d.id, dimmed: false, data: d, laneId },
         });
         cursorY += DATA_H + CELL_GAP;
+      }
+    }
+
+    if (layers.artifacts) {
+      const arts = stepArtifacts
+        .filter((sa) => sa.step_id === step.id)
+        .sort((a, b) => a.artifact.name.localeCompare(b.artifact.name));
+      for (const sa of arts) {
+        cellNodes.push({
+          id: `acell:${sa.id}`,
+          type: "artifactCell",
+          position: { x: cellX, y: cursorY },
+          zIndex: 2,
+          data: {
+            label: sa.artifact.name,
+            nodeKind: "data_element",
+            entityId: sa.artifact_id,
+            dimmed: false,
+            artifact: sa.artifact,
+            laneId,
+          },
+        });
+        cursorY += ARTIFACT_H + CELL_GAP;
       }
     }
 

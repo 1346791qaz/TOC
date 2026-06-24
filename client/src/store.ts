@@ -6,6 +6,7 @@ export type ViewKey =
   | "steps"
   | "personas"
   | "data"
+  | "artifacts"
   | "connections"
   | "gaps"
   | "constraints"
@@ -24,6 +25,7 @@ export interface Selection {
     | "process_steps"
     | "personas"
     | "data_elements"
+    | "artifacts"
     | "constraints"
     | "metrics"
     | "assumptions";
@@ -39,7 +41,7 @@ interface UiState {
 
   // Canvas transient state
   layoutMode: LayoutMode;
-  layers: { personas: boolean; data: boolean; constraints: boolean };
+  layers: { personas: boolean; data: boolean; constraints: boolean; artifacts: boolean };
 
   // Drill-down path into sub-steps (used by the Steps list view).
   stepPath: { id: string; name: string }[];
@@ -66,7 +68,7 @@ export const useUi = create<UiState>((set) => ({
   selection: null,
   commandOpen: false,
   layoutMode: "full",
-  layers: { personas: true, data: true, constraints: true },
+  layers: { personas: true, data: true, constraints: true, artifacts: true },
   stepPath: [],
   expandedSteps: [],
 

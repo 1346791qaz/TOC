@@ -17,11 +17,13 @@ import {
 import { ChevronsDownUp, ChevronsUpDown, Info, Plus } from "lucide-react";
 import { EDGE_TYPES, type EdgeType, type FlowNodeType } from "@shared/enums";
 import type {
+  Artifact,
   Constraint,
   DataElement,
   FlowEdge,
   Persona,
   ProcessStep,
+  StepArtifact,
   StepDataElement,
   StepPersona,
   ValueStream,
@@ -183,6 +185,8 @@ function CanvasInner({ vsId }: { vsId: string }) {
   const allStepPersonas = useList<StepPersona>("step_personas");
   const constraints = useList<Constraint>("constraints", { where: { value_stream_id: vsId } });
   const edges = useList<FlowEdge>("flow_edges", { where: { value_stream_id: vsId } });
+  const allArtifacts = useList<Artifact>("artifacts", { where: { value_stream_id: vsId } });
+  const allStepArtifacts = useList<StepArtifact>("step_artifacts");
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node<OilNodeData>>([]);
   const [rfEdges, setRfEdges, onEdgesChange] = useEdgesState<Edge>([]);
@@ -263,7 +267,7 @@ function CanvasInner({ vsId }: { vsId: string }) {
   };
 
   const ready =
-    steps.data && personas.data && allDataDefs.data && allSDEs.data && allStepPersonas.data && constraints.data && edges.data;
+    steps.data && personas.data && allDataDefs.data && allSDEs.data && allStepPersonas.data && constraints.data && edges.data && allArtifacts.data && allStepArtifacts.data;
 
   useEffect(() => {
     if (!ready) return;
@@ -273,6 +277,14 @@ function CanvasInner({ vsId }: { vsId: string }) {
     const refit = () => setTimeout(() => fitView({ padding: 0.2, duration: 300 }), 50);
 
     if (layoutMode === "full") {
+      // Build step→artifact links for the canvas layer
+      const vsStepIds = new Set(allSteps.map((s) => s.id));
+      const vsStepArtifacts = (allStepArtifacts.data ?? []).filter((sa) => vsStepIds.has(sa.step_id));
+      const artifactById = new Map((allArtifacts.data ?? []).map((a) => [a.id, a]));
+      const stepArtifactLinks = vsStepArtifacts
+        .map((sa) => ({ ...sa, artifact: artifactById.get(sa.artifact_id) }))
+        .filter((sa): sa is typeof sa & { artifact: Artifact } => !!sa.artifact);
+
       const graph = buildAttachedGraph({
         steps: allSteps,
         personas: personas.data ?? [],
@@ -280,6 +292,7 @@ function CanvasInner({ vsId }: { vsId: string }) {
         stepPersonas,
         constraints: constraints.data ?? [],
         edges: edges.data ?? [],
+        stepArtifacts: stepArtifactLinks,
         layers,
         expanded: expandedSet,
       });
@@ -312,7 +325,7 @@ function CanvasInner({ vsId }: { vsId: string }) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, allSteps, personas.data, allDataDefs.data, allSDEs.data, allStepPersonas.data, constraints.data, edges.data, layoutMode, layers, expandedSet]);
+  }, [ready, allSteps, personas.data, allDataDefs.data, allSDEs.data, allStepPersonas.data, constraints.data, edges.data, allArtifacts.data, allStepArtifacts.data, layoutMode, layers, expandedSet]);
 
   // Magnifier: show lens while Alt is held and mouse is over the canvas.
   useEffect(() => {
@@ -371,7 +384,7 @@ function CanvasInner({ vsId }: { vsId: string }) {
             </div>
             {layoutMode === "full" && (
               <div className="flex gap-1 rounded-md border border-border bg-surface/90 p-1 backdrop-blur">
-                {(["personas", "data", "constraints"] as const).map((l) => (
+                {(["personas", "data", "artifacts", "constraints"] as const).map((l) => (
                   <button
                     key={l}
                     onClick={() => toggleLayer(l)}

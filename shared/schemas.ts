@@ -1,5 +1,7 @@
 import { z } from "zod";
 import {
+  artifactFormSchema,
+  artifactTypeSchema,
   assumptionStatusSchema,
   bindingPointSchema,
   constraintKindSchema,
@@ -241,6 +243,29 @@ export const dbConnection = makeEntity({
 export type DbConnection = z.infer<typeof dbConnection.record>;
 
 // ---------------------------------------------------------------------------
+// 4.9c artifacts — physical, digital, or intangible items that move through
+// the value stream (docs, spreadsheets, videos, PDFs, paper files, etc.).
+// These are NOT data elements — they don't map to a specific data field.
+// ---------------------------------------------------------------------------
+export const artifact = makeEntity({
+  value_stream_id: z.string().uuid(),
+  name: z.string().min(1, "Name is required"),
+  artifact_type: artifactTypeSchema.default("document"),
+  description: nullableText,
+  form: artifactFormSchema.default("digital"),
+});
+export type Artifact = z.infer<typeof artifact.record>;
+
+// ---------------------------------------------------------------------------
+// 4.9d step_artifacts — M:N junction linking an artifact to a process step.
+// ---------------------------------------------------------------------------
+export const stepArtifact = makeEntity({
+  step_id: z.string().uuid(),
+  artifact_id: z.string().uuid(),
+});
+export type StepArtifact = z.infer<typeof stepArtifact.record>;
+
+// ---------------------------------------------------------------------------
 // 4.10 flow_edges
 // ---------------------------------------------------------------------------
 export const flowEdge = makeEntity({
@@ -268,6 +293,8 @@ export const ENTITIES = {
   step_personas: { table: "step_personas", schema: stepPersona },
   data_elements: { table: "data_elements", schema: dataElement },
   step_data_elements: { table: "step_data_elements", schema: stepDataElement },
+  artifacts: { table: "artifacts", schema: artifact },
+  step_artifacts: { table: "step_artifacts", schema: stepArtifact },
   constraints: { table: "constraints", schema: constraint },
   flow_edges: { table: "flow_edges", schema: flowEdge },
   db_connections: { table: "db_connections", schema: dbConnection },
