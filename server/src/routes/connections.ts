@@ -2,6 +2,7 @@ import { Router } from "express";
 import { repos } from "../repositories/index";
 import { testConnection, listSchemas, listTables, listColumns, previewRows } from "../lib/dbConnector";
 import type { ColumnInfo } from "../lib/dbConnector";
+import type { DataElement } from "@shared/schemas";
 
 function buildDdl(schema: string, table: string, columns: ColumnInfo[]): string {
   const lines = columns.map((col) => {
@@ -88,6 +89,29 @@ export function connectionsRouter(): Router {
     } catch (e) {
       res.status(500).json({ error: String(e) });
     }
+  });
+
+  // POST /api/db_connections/:id/trash-cascade
+  // Soft-deletes a connection, all its linked data elements, and their step bindings.
+  // Returns counts so the client can display a confirmation summary.
+  router.post("/:id/trash-cascade", (req, res) => {
+    const conn = repos.db_connections.get(req.params.id);
+    if (!conn) { res.status(404).json({ error: "Connection not found" }); return; }
+
+    const des = repos.data_elements.list({ where: { db_connection_id: req.params.id } }) as DataElement[];
+    let sdeCount = 0;
+
+    for (const de of des) {
+      const sdes = repos.step_data_elements.list({ where: { data_element_id: de.id } });
+      for (const sde of sdes) {
+        repos.step_data_elements.softDelete(sde.id);
+        sdeCount++;
+      }
+      repos.data_elements.softDelete(de.id);
+    }
+
+    repos.db_connections.softDelete(req.params.id);
+    res.json({ de_count: des.length, sde_count: sdeCount });
   });
 
   return router;

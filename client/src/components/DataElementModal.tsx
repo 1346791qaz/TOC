@@ -432,6 +432,7 @@ export function DataElementModal({
               data_type:            draft.data_type || null,
               length:               draft.length || null,
               example_value:        draft.example_value || null,
+              db_connection_id:     liveSel?.connId ?? null,
             },
             { onSuccess: () => resolve(), onError: reject },
           );

@@ -11,7 +11,8 @@ import {
   XCircle,
 } from "lucide-react";
 import type { DbConnection, DbDriverType } from "@shared/schemas";
-import { useCreate, useList, useSoftDelete, useUpdate } from "@/lib/queries";
+import { useCascadeTrashConnection, useCreate, useList, useRestore, useSoftDelete, useUpdate } from "@/lib/queries";
+import { api } from "@/lib/api";
 import { ViewShell, EmptyHint } from "@/components/ViewShell";
 import { Modal } from "@/components/ui/modal";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -583,13 +584,17 @@ function TestBadge({ status, latency }: { status: TestStatus; latency: number | 
 
 export function ConnectionsView({ vsId }: { vsId: string }) {
   const connections = useList<DbConnection>("db_connections", { where: { value_stream_id: vsId } });
-  const createConn  = useCreate("db_connections");
-  const updateConn  = useUpdate("db_connections");
-  const del         = useSoftDelete("db_connections");
+  const createConn     = useCreate("db_connections");
+  const updateConn     = useUpdate("db_connections");
+  const del            = useSoftDelete("db_connections");
+  const restoreConn    = useRestore<DbConnection>("db_connections");
+  const cascadeTrash   = useCascadeTrashConnection();
 
-  const [showForm,       setShowForm]       = useState(false);
-  const [editingConn,    setEditingConn]    = useState<DbConnection | null>(null);
-  const [confirmingConn, setConfirmingConn] = useState<DbConnection | null>(null);
+  const [showForm,            setShowForm]            = useState(false);
+  const [editingConn,         setEditingConn]         = useState<DbConnection | null>(null);
+  const [confirmingConn,      setConfirmingConn]      = useState<DbConnection | null>(null);
+  const [cascadeConfirm,      setCascadeConfirm]      = useState<{ conn: DbConnection; deCount: number } | null>(null);
+  const [matchingTrashedConn, setMatchingTrashedConn] = useState<{ conn: DbConnection; pendingForm: ConnectionFormState } | null>(null);
   const [formError,   setFormError]   = useState<string | null>(null);
   const [saving,      setSaving]      = useState(false);
   const [testStatus,  setTestStatus]  = useState<Record<string, TestStatus>>({});
@@ -602,9 +607,40 @@ export function ConnectionsView({ vsId }: { vsId: string }) {
     if (!showForm && !editingConn) setFormError(null);
   }, [showForm, editingConn]);
 
-  function handleCreate(form: ConnectionFormState) {
+  async function handleCreate(form: ConnectionFormState) {
     setSaving(true);
     setFormError(null);
+
+    // Check for a matching trashed connection before creating
+    try {
+      const trashed = await api.list<DbConnection>("db_connections", {
+        trashed: true,
+        where: { value_stream_id: vsId },
+      });
+      const match = trashed.find(
+        (c) =>
+          c.driver_type === form.driver_type &&
+          (c.host ?? "") === form.host &&
+          (c.port != null ? String(c.port) : "") === form.port &&
+          (c.username ?? "") === form.username,
+      );
+      if (match) {
+        setSaving(false);
+        setMatchingTrashedConn({ conn: match, pendingForm: form });
+        return;
+      }
+    } catch {
+      // If the check fails, just proceed with creation
+    }
+
+    createConn.mutate(formToPayload(form, vsId), {
+      onSuccess: () => { setSaving(false); setShowForm(false); },
+      onError:   (e) => { setSaving(false); setFormError(String(e)); },
+    });
+  }
+
+  function proceedWithCreate(form: ConnectionFormState) {
+    setSaving(true);
     createConn.mutate(formToPayload(form, vsId), {
       onSuccess: () => { setSaving(false); setShowForm(false); },
       onError:   (e) => { setSaving(false); setFormError(String(e)); },
@@ -727,12 +763,78 @@ export function ConnectionsView({ vsId }: { vsId: string }) {
         </Modal>
       )}
 
+      {/* First delete confirmation */}
       <ConfirmDialog
         open={confirmingConn !== null}
         onClose={() => setConfirmingConn(null)}
-        onConfirm={() => { if (confirmingConn) del.mutate(confirmingConn.id); }}
+        onConfirm={async () => {
+          if (!confirmingConn) return;
+          const conn = confirmingConn;
+          setConfirmingConn(null);
+          try {
+            const des = await api.list<{ id: string }>("data_elements", {
+              where: { db_connection_id: conn.id },
+            });
+            if (des.length > 0) {
+              setCascadeConfirm({ conn, deCount: des.length });
+            } else {
+              del.mutate(conn.id);
+            }
+          } catch {
+            del.mutate(conn.id);
+          }
+        }}
         message={`Move "${confirmingConn?.name ?? ""}" to Trash? It can be restored later.`}
       />
+
+      {/* Second confirmation when the connection has linked data elements */}
+      <ConfirmDialog
+        open={cascadeConfirm !== null}
+        onClose={() => setCascadeConfirm(null)}
+        onConfirm={() => {
+          if (!cascadeConfirm) return;
+          cascadeTrash.mutate(cascadeConfirm.conn.id);
+          setCascadeConfirm(null);
+        }}
+        message={`"${cascadeConfirm?.conn.name ?? ""}" has ${cascadeConfirm?.deCount ?? 0} linked data element(s) and their step bindings. All will also be moved to Trash. Continue?`}
+      />
+
+      {/* Offer to restore a matching trashed connection instead of creating a new one */}
+      <Modal
+        open={matchingTrashedConn !== null}
+        onClose={() => setMatchingTrashedConn(null)}
+        title="Existing Connection Found in Trash"
+        footer={
+          <>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                const pending = matchingTrashedConn?.pendingForm;
+                setMatchingTrashedConn(null);
+                if (pending) proceedWithCreate(pending);
+              }}
+            >
+              Create New
+            </Button>
+            <Button
+              onClick={() => {
+                const id = matchingTrashedConn?.conn.id;
+                setMatchingTrashedConn(null);
+                setShowForm(false);
+                if (id) restoreConn.mutate(id);
+              }}
+            >
+              Restore Existing
+            </Button>
+          </>
+        }
+      >
+        <p className="py-1 text-sm">
+          A connection with the same type, host, port, and username
+          (<span className="font-medium">{matchingTrashedConn?.conn.name}</span>) was previously
+          deleted. Would you like to restore it instead of creating a new one?
+        </p>
+      </Modal>
     </ViewShell>
   );
 }

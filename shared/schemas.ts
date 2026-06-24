@@ -158,6 +158,7 @@ export const dataElement = makeEntity({
   table_or_view: nullableText,
   field_name: nullableText,
   example_value: nullableText,
+  db_connection_id: z.string().uuid().nullable().default(null),
 });
 export type DataElement = z.infer<typeof dataElement.record>;
 
