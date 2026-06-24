@@ -166,6 +166,7 @@ export function seedAcme(): { seeded: boolean; subStepsAdded: number } {
   }
 
   // ---- data elements (gaps concentrated at Final Assembly & Test) --------
+  // Document/file artifacts are seeded in the artifacts section below.
   type DE = {
     step: number;
     name: string;
@@ -175,42 +176,28 @@ export function seedAcme(): { seeded: boolean; subStepsAdded: number } {
     src?: string;
     key?: boolean;
     notes?: string;
-    desc?: string; // business name / description
-    tbl?: string; // table or view
-    fld?: string; // field name
-    ex?: string; // example value
+    desc?: string;
+    tbl?: string;
+    fld?: string;
+    ex?: string;
   };
   const data: DE[] = [
-    { step: 1, name: "Customer PO", bind: "entry", presence: "present", type: "string(10)", src: "EDI / Portal", key: true, desc: "Customer purchase order number", tbl: "VBAK", fld: "BSTNK", ex: "PO-2026-04417" },
-    { step: 1, name: "Credit check", bind: "action", presence: "partial", type: "char(1)", src: "SAP FI", notes: "Sometimes overridden verbally", desc: "Credit release status", tbl: "VBUK", fld: "CMGST", ex: "A (approved)" },
-    { step: 1, name: "Promised ship date", bind: "exit", presence: "partial", type: "date", src: "SAP SD", key: true, notes: "Often a placeholder, refined later", desc: "Confirmed delivery date committed to customer", tbl: "VBAP", fld: "EDATU", ex: "2026-05-12" },
-    { step: 2, name: "Demand forecast", bind: "entry", presence: "partial", type: "decimal", src: "Excel", key: true, notes: "Maintained in a spreadsheet, weekly", desc: "Weekly demand forecast by SKU", tbl: "forecast.xlsx", fld: "qty_wk", ex: "1,250" },
-    { step: 2, name: "MRP output", bind: "action", presence: "present", type: "report", src: "SAP PP", desc: "Planned orders from MRP", tbl: "PLAF", fld: "GSMNG", ex: "320" },
-    { step: 2, name: "Production schedule", bind: "exit", presence: "missing", type: "plan", src: "Whiteboard", key: true, notes: "Lives on the floor whiteboard; not in any system", desc: "Sequenced build schedule for the line", tbl: "(none — whiteboard)", fld: "—", ex: "Line 2: WO-8841, WO-8839…" },
-    { step: 3, name: "Supplier lead times", bind: "entry", presence: "partial", type: "int (days)", src: "Email", notes: "Tribal; varies by buyer", desc: "Expected supplier lead time", tbl: "EINE", fld: "PLIFZ", ex: "21" },
-    { step: 3, name: "Purchase orders", bind: "action", presence: "present", type: "string(10)", src: "SAP MM", desc: "Purchase order to supplier", tbl: "EKKO", fld: "EBELN", ex: "4500091234" },
-    { step: 3, name: "Material certs", bind: "exit", presence: "missing", type: "doc", src: "Supplier portal", key: true, notes: "Arrive late; block traceability", desc: "Material certificate of analysis", tbl: "(supplier portal)", fld: "cert_id", ex: "COA-RS-22918" },
-    { step: 4, name: "Inspection plan", bind: "entry", presence: "missing", type: "doc", src: "Paper", key: true, notes: "No standard plan; inspector improvises" },
-    { step: 4, name: "Sample results", bind: "action", presence: "partial", type: "report", src: "QMS", notes: "Stored locally, not linked to lot" },
-    { step: 4, name: "Disposition record", bind: "exit", presence: "missing", type: "status", src: "None", key: true, notes: "Accept/reject is verbal" },
-    { step: 5, name: "Mold setup sheet", bind: "entry", presence: "present", type: "doc", src: "MES" },
-    { step: 5, name: "Shot / cycle data", bind: "action", presence: "partial", type: "number", src: "MES", notes: "Logged inconsistently per shift" },
-    { step: 5, name: "Scrap count", bind: "exit", presence: "missing", type: "number", src: "Manual tally", notes: "Counted by hand, end of shift" },
-    { step: 6, name: "Electronics kit list", bind: "entry", presence: "present", type: "BOM", src: "ERP" },
-    { step: 6, name: "Work instructions", bind: "action", presence: "partial", type: "doc", src: "PLM", notes: "Rev not always current at station" },
-    { step: 7, name: "Assembly traveler", bind: "entry", presence: "partial", type: "paper", src: "Paper", key: true, notes: "Handwritten; frequently incomplete", desc: "Build traveler accompanying the unit", tbl: "(paper)", fld: "—", ex: "Traveler #A-5521" },
-    { step: 7, name: "Torque spec", bind: "action", presence: "missing", type: "N·m", src: "Tribal knowledge", key: true, notes: "Known only to senior builders", desc: "Fastener torque specification", tbl: "(none)", fld: "—", ex: "2.4 N·m ±0.2" },
-    { step: 7, name: "As-built record", bind: "exit", presence: "missing", type: "record", src: "None", key: true, notes: "No serialized build record captured", desc: "Serialized as-built configuration", tbl: "(none — gap)", fld: "—", ex: "SN→component map" },
-    { step: 7, name: "Labor hours", bind: "action", presence: "missing", type: "decimal", src: "Manual", notes: "Not captured per unit", desc: "Direct labor hours per unit", tbl: "(none)", fld: "—", ex: "0.85" },
-    { step: 8, name: "Test program", bind: "entry", presence: "missing", type: "software", src: "Engineer's PC", key: true, notes: "Single copy on one laptop; undocumented", desc: "Functional test sequence/program", tbl: "(laptop file)", fld: "—", ex: "widget_fct_v7.seq" },
-    { step: 8, name: "Test results", bind: "action", presence: "partial", type: "report", src: "QMS", key: true, notes: "Pass/fail captured; parametric data lost", desc: "Functional test outcome", tbl: "qms.test_results", fld: "result", ex: "PASS" },
-    { step: 8, name: "Calibration cert", bind: "entry", presence: "partial", type: "cert", src: "QMS" },
-    { step: 8, name: "Final disposition", bind: "exit", presence: "missing", type: "status", src: "None", key: true, notes: "Release decision is verbal" },
-    { step: 9, name: "Serial / label data", bind: "action", presence: "present", type: "record", src: "WMS", key: true },
-    { step: 9, name: "Pack list", bind: "exit", presence: "present", type: "doc", src: "ERP" },
-    { step: 10, name: "Inventory location", bind: "action", presence: "partial", type: "code", src: "WMS", notes: "Occasionally mis-slotted" },
-    { step: 11, name: "Bill of lading", bind: "action", presence: "present", type: "doc", src: "Carrier portal" },
-    { step: 11, name: "Tracking number", bind: "exit", presence: "present", type: "code", src: "ERP", key: true },
+    { step: 1,  name: "Customer PO",         bind: "entry",  presence: "present", type: "string(10)",  src: "EDI / Portal",    key: true,  desc: "Customer purchase order number",                        tbl: "VBAK",            fld: "BSTNK",  ex: "PO-2026-04417" },
+    { step: 1,  name: "Credit check",        bind: "action", presence: "partial", type: "char(1)",     src: "SAP FI",          notes: "Sometimes overridden verbally", desc: "Credit release status",  tbl: "VBUK",            fld: "CMGST",  ex: "A (approved)" },
+    { step: 1,  name: "Promised ship date",  bind: "exit",   presence: "partial", type: "date",        src: "SAP SD",          key: true,  notes: "Often a placeholder, refined later", desc: "Confirmed delivery date committed to customer", tbl: "VBAP", fld: "EDATU", ex: "2026-05-12" },
+    { step: 2,  name: "Demand forecast",     bind: "entry",  presence: "partial", type: "decimal",     src: "Excel",           key: true,  notes: "Maintained in a spreadsheet, weekly", desc: "Weekly demand forecast by SKU", tbl: "forecast.xlsx", fld: "qty_wk", ex: "1,250" },
+    { step: 3,  name: "Supplier lead times", bind: "entry",  presence: "partial", type: "int (days)",  src: "Email",           notes: "Tribal; varies by buyer", desc: "Expected supplier lead time", tbl: "EINE", fld: "PLIFZ", ex: "21" },
+    { step: 3,  name: "Purchase orders",     bind: "action", presence: "present", type: "string(10)",  src: "SAP MM",          desc: "Purchase order to supplier",                                    tbl: "EKKO",            fld: "EBELN",  ex: "4500091234" },
+    { step: 4,  name: "Disposition record",  bind: "exit",   presence: "missing", type: "status",      src: "None",            key: true,  notes: "Accept/reject is verbal" },
+    { step: 5,  name: "Shot / cycle data",   bind: "action", presence: "partial", type: "number",      src: "MES",             notes: "Logged inconsistently per shift" },
+    { step: 5,  name: "Scrap count",         bind: "exit",   presence: "missing", type: "number",      src: "Manual tally",    notes: "Counted by hand, end of shift" },
+    { step: 7,  name: "Torque spec",         bind: "action", presence: "missing", type: "N·m",         src: "Tribal knowledge", key: true, notes: "Known only to senior builders", desc: "Fastener torque specification", tbl: "(none)", fld: "—", ex: "2.4 N·m ±0.2" },
+    { step: 7,  name: "As-built record",     bind: "exit",   presence: "missing", type: "record",      src: "None",            key: true,  notes: "No serialized build record captured", desc: "Serialized as-built configuration", tbl: "(none — gap)", fld: "—", ex: "SN→component map" },
+    { step: 7,  name: "Labor hours",         bind: "action", presence: "missing", type: "decimal",     src: "Manual",          notes: "Not captured per unit", desc: "Direct labor hours per unit", tbl: "(none)", fld: "—", ex: "0.85" },
+    { step: 8,  name: "Final disposition",   bind: "exit",   presence: "missing", type: "status",      src: "None",            key: true,  notes: "Release decision is verbal" },
+    { step: 9,  name: "Serial / label data", bind: "action", presence: "present", type: "record",      src: "WMS",             key: true },
+    { step: 10, name: "Inventory location",  bind: "action", presence: "partial", type: "code",        src: "WMS",             notes: "Occasionally mis-slotted" },
+    { step: 11, name: "Tracking number",     bind: "exit",   presence: "present", type: "code",        src: "ERP",             key: true },
   ];
   for (const d of data) {
     const def = repos.data_elements.create({
@@ -232,6 +219,35 @@ export function seedAcme(): { seeded: boolean; subStepsAdded: number } {
       quality_notes: d.notes ?? null,
       is_key: d.key ?? false,
     });
+  }
+
+  // ---- artifacts (document and file items that move through the stream) -----
+  type ArtDef = { step: number; name: string; artifact_type: string; form: string; description?: string };
+  const artData: ArtDef[] = [
+    { step: 2,  name: "MRP output",           artifact_type: "document",   form: "digital",    description: "SAP PP planned order output from the MRP run." },
+    { step: 2,  name: "Production schedule",  artifact_type: "document",   form: "intangible", description: "Build sequence on the floor whiteboard — not captured in any system." },
+    { step: 3,  name: "Material certs",       artifact_type: "document",   form: "digital",    description: "Source: Supplier portal. Arrive late; block traceability." },
+    { step: 4,  name: "Inspection plan",      artifact_type: "document",   form: "physical",   description: "Source: Paper. No standard plan; inspector improvises each time." },
+    { step: 4,  name: "Sample results",       artifact_type: "document",   form: "digital",    description: "Source: QMS. Stored locally, not linked to lot." },
+    { step: 5,  name: "Mold setup sheet",     artifact_type: "document",   form: "digital",    description: "Source: MES." },
+    { step: 6,  name: "Electronics kit list", artifact_type: "document",   form: "digital",    description: "BOM-driven kit list from ERP." },
+    { step: 6,  name: "Work instructions",    artifact_type: "document",   form: "digital",    description: "Source: PLM. Rev not always current at the station." },
+    { step: 7,  name: "Assembly traveler",    artifact_type: "paper_file", form: "physical",   description: "Handwritten paper traveler accompanying the unit; frequently incomplete." },
+    { step: 8,  name: "Test program",         artifact_type: "other",      form: "digital",    description: "Functional test sequence file. Single copy on one engineer's laptop; undocumented." },
+    { step: 8,  name: "Test results",         artifact_type: "document",   form: "digital",    description: "Source: QMS. Pass/fail captured; parametric data lost." },
+    { step: 8,  name: "Calibration cert",     artifact_type: "document",   form: "digital",    description: "Source: QMS." },
+    { step: 9,  name: "Pack list",            artifact_type: "document",   form: "digital",    description: "Source: ERP." },
+    { step: 11, name: "Bill of lading",       artifact_type: "document",   form: "digital",    description: "Source: Carrier portal." },
+  ];
+  for (const a of artData) {
+    const art = repos.artifacts.create({
+      value_stream_id: V,
+      name: a.name,
+      artifact_type: a.artifact_type as never,
+      form: a.form as never,
+      description: a.description ?? null,
+    });
+    repos.step_artifacts.create({ step_id: S(a.step), artifact_id: art.id });
   }
 
   // ---- metrics (baseline -> current -> target) ---------------------------
@@ -414,6 +430,12 @@ interface SubDataDef {
   ex?: string;
   notes?: string;
 }
+interface SubArtifactDef {
+  name: string;
+  artifact_type: string;
+  form: string;
+  description?: string;
+}
 interface SubStepDef {
   k: number;
   name: string;
@@ -424,6 +446,7 @@ interface SubStepDef {
   wait?: number;
   pca?: number;
   data?: SubDataDef[];
+  arts?: SubArtifactDef[];
 }
 interface ParentSubs {
   parent: number; // S(parent)
@@ -455,14 +478,14 @@ const SUB_DEFS: ParentSubs[] = [
     parent: 4, block: "05", executor: 4,
     subs: [
       { k: 1, name: "Receive at dock", entry: "Truck arrives", action: "Receive and stage materials", exit: "Materials received", data: [{ name: "Goods receipt", bind: "entry", presence: "present", desc: "Goods-receipt document", type: "string(10)", src: "SAP MM", tbl: "MSEG", fld: "MBLNR", ex: "5000456789" }] },
-      { k: 2, name: "Sample per plan", entry: "Received lot", action: "Pull sample and measure vs spec", exit: "Sample measured", data: [{ name: "Inspection plan", bind: "entry", presence: "missing", key: true, desc: "Standard sampling / inspection plan", src: "Paper", tbl: "(none)", fld: "—", ex: "AQL 1.0", notes: "No standardized plan" }] },
+      { k: 2, name: "Sample per plan", entry: "Received lot", action: "Pull sample and measure vs spec", exit: "Sample measured", arts: [{ name: "Inspection plan", artifact_type: "document", form: "physical", description: "Standard sampling / inspection plan. No standardized plan; inspector improvises. Source: Paper." }] },
       { k: 3, name: "Disposition lot", entry: "Sample results", action: "Accept / reject and record", exit: "Lot dispositioned", data: [{ name: "Disposition", bind: "exit", presence: "missing", key: true, desc: "Accept / reject decision", src: "None", tbl: "(none)", fld: "—", ex: "Accept", notes: "Verbal, not recorded" }] },
     ],
   },
   {
     parent: 8, block: "06", executor: 8,
     subs: [
-      { k: 1, name: "Load test program", entry: "Unit + traveler", action: "Load the FCT program on the rig", exit: "Rig ready", data: [{ name: "Test program", bind: "entry", presence: "missing", key: true, desc: "Functional test sequence", src: "Engineer laptop", tbl: "(file)", fld: "—", ex: "widget_fct_v7.seq", notes: "Single laptop copy" }] },
+      { k: 1, name: "Load test program", entry: "Unit + traveler", action: "Load the FCT program on the rig", exit: "Rig ready", arts: [{ name: "Test program", artifact_type: "other", form: "digital", description: "Functional test sequence file. Single copy on one engineer's laptop. Source: Engineer laptop." }] },
       { k: 2, name: "Power-on & calibrate", entry: "Rig ready", action: "Power on and calibrate", exit: "Calibrated", data: [{ name: "Calibration cert", bind: "action", presence: "partial", desc: "Calibration record", type: "string", src: "QMS", tbl: "qms.calibration", fld: "cert_id", ex: "CAL-7741" }] },
       { k: 3, name: "Leak / EMC check", entry: "Calibrated unit", action: "Run leak and EMC checks", exit: "Checks complete", data: [{ name: "Parametric results", bind: "action", presence: "missing", key: true, desc: "Measured test parameters", src: "Test rig", tbl: "(not persisted)", fld: "—", ex: "leak 2.1 sccm", notes: "Discarded; only pass/fail kept" }] },
       { k: 4, name: "Disposition & release", entry: "Checks complete", action: "Pass / fail and release", exit: "Released or scrapped", data: [{ name: "Final disposition", bind: "exit", presence: "missing", key: true, desc: "Release decision", src: "None", tbl: "(none)", fld: "—", ex: "PASS", notes: "Verbal" }] },
@@ -521,6 +544,16 @@ export function seedAcmeSubSteps(): number {
           quality_notes: d.notes ?? null,
           is_key: d.key ?? false,
         });
+      }
+      for (const a of s.arts ?? []) {
+        const art = repos.artifacts.create({
+          value_stream_id: V,
+          name: a.name,
+          artifact_type: a.artifact_type as never,
+          form: a.form as never,
+          description: a.description ?? null,
+        });
+        repos.step_artifacts.create({ step_id: SUB(def.block, s.k), artifact_id: art.id });
       }
     }
     // Sequence spine among this parent's sub-steps.
@@ -623,6 +656,16 @@ export function seedAcmeGrandSubSteps(): number {
           quality_notes: d.notes ?? null,
           is_key: d.key ?? false,
         });
+      }
+      for (const a of s.arts ?? []) {
+        const art = repos.artifacts.create({
+          value_stream_id: V,
+          name: a.name,
+          artifact_type: a.artifact_type as never,
+          form: a.form as never,
+          description: a.description ?? null,
+        });
+        repos.step_artifacts.create({ step_id: gsubId(def.block, s.k), artifact_id: art.id });
       }
     }
     for (let i = 1; i < def.subs.length; i++) {
