@@ -1,27 +1,11 @@
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect } from "@playwright/test";
+import { gotoApp, nav, confirmDialog } from "./helpers";
 
 // Thorough end-to-end walkthrough of every Value Stream Model Engine feature,
 // driven against a freshly seeded database (see playwright.config.ts webServer).
 // Runs serially so created/deleted entities have a predictable lifecycle.
 
 test.describe.configure({ mode: "serial" });
-
-// Auto-accept the soft-delete confirm() dialogs.
-test.beforeEach(async ({ page }) => {
-  page.on("dialog", (d) => d.accept());
-});
-
-const nav = (page: Page, name: string) =>
-  page.getByRole("button", { name, exact: true }).click();
-
-async function gotoApp(page: Page) {
-  await page.goto("/");
-  // Bootstrap selects the seed engagement + value stream.
-  await expect(page.getByText("Value Stream Model Engine")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Made-to-Order Machined Parts" })).toBeVisible({
-    timeout: 15_000,
-  });
-}
 
 test("01 · app boots with the seeded engagement and overview", async ({ page }) => {
   await gotoApp(page);
@@ -61,14 +45,21 @@ test("02 · process steps: entry/action/exit, edit, RACI persona, data binding, 
   // Assert the assigned-list row (a span), not the <option> in the picker.
   await expect(raci.locator("span.font-medium", { hasText: "Production Planner" })).toBeVisible();
 
-  // Bind a new data element to the step.
+  // Bind a new data element to the step via the two-panel BindDataModal.
   await page.getByRole("button", { name: "Bind data" }).click();
   await expect(page.getByTestId("modal")).toBeVisible();
+  // Navigate: Define new element → fills definition form.
+  await page.getByRole("button", { name: "Define new element" }).click();
   await page.getByTestId("field-name").fill("E2E Bound Data");
+  await page.getByRole("button", { name: "Create" }).click();
+  // Junction phase: set step-relationship fields.
   await page.getByTestId("field-binding_point").selectOption("exit");
   await page.getByTestId("field-presence").selectOption("missing");
   await page.getByTestId("field-is_key").check();
-  await page.getByRole("button", { name: "Create" }).click();
+  await page.getByRole("button", { name: "Bind" }).click();
+  // BindDataModal reopens after define+bind; close it.
+  await expect(page.getByTestId("modal")).toBeVisible();
+  await page.getByRole("button", { name: "Cancel" }).click();
   await expect(page.getByTestId("modal")).toBeHidden();
   await expect(page.getByText("E2E Bound Data")).toBeVisible();
 
@@ -105,23 +96,23 @@ test("03 · personas: scope filter, create", async ({ page }) => {
   await expect(page.getByText("E2E Persona")).toBeVisible();
 });
 
-test("04 · data elements: list and create with step picker", async ({ page }) => {
+test("04 · data elements: list and create catalog element (define mode)", async ({ page }) => {
   await gotoApp(page);
   await nav(page, "Data Elements");
   await expect(page.getByText("CNC program")).toBeVisible();
 
+  // +Data element opens define mode (no step picker — creates a catalog entry).
   await page.getByRole("button", { name: "Data element", exact: true }).click();
-  // The required step picker must default to a real step (not "") even when the
-  // user never touches it — otherwise the form posts an empty step and fails.
-  await expect(page.getByTestId("field-step_id")).not.toHaveValue("");
-  await page.getByTestId("field-step_id").selectOption({ label: "Order Intake" });
-  await page.getByTestId("field-name").fill("E2E DataView Elem");
-  await page.getByTestId("field-presence").selectOption("partial");
-  // New granular data-point fields (table/view + field name).
+  await expect(page.getByTestId("modal")).toBeVisible();
+  await page.getByTestId("field-name").fill("E2E Catalog Elem");
   await page.getByTestId("field-table_or_view").fill("VBAP");
   await page.getByTestId("field-field_name").fill("ZZFIELD");
   await page.getByRole("button", { name: "Create" }).click();
-  await expect(page.getByText("E2E DataView Elem")).toBeVisible();
+  await expect(page.getByTestId("modal")).toBeHidden();
+
+  // Appears in the "Catalog — not yet bound" section.
+  await expect(page.getByText("Catalog — not yet bound to a step")).toBeVisible();
+  await expect(page.getByText("E2E Catalog Elem")).toBeVisible();
   await expect(page.getByText("VBAP.ZZFIELD")).toBeVisible();
 });
 
@@ -277,6 +268,8 @@ test("12 · trash and restore a soft-deleted persona", async ({ page }) => {
   const row = page.locator("tr").filter({ hasText: "E2E Persona" });
   await expect(row).toBeVisible();
   await row.getByRole("button", { name: "Delete" }).click();
+  // Confirm the styled dialog (ConfirmDialog replaces native confirm()).
+  await confirmDialog(page);
   await expect(page.locator("tr").filter({ hasText: "E2E Persona" })).toBeHidden();
 
   // It appears in Trash and can be restored.

@@ -3,6 +3,7 @@ import { Plus } from "lucide-react";
 import type { LinkedDataElement } from "@shared/gaps";
 import type { DataElement, ProcessStep, StepDataElement } from "@shared/schemas";
 import { linkDataElements } from "@shared/gaps";
+import type { BindingPoint, Presence } from "@shared/enums";
 import { useList } from "@/lib/queries";
 import { presenceTone } from "@/lib/display";
 import { ViewShell, SearchBar, Table, Tr, Td, EmptyHint, type SortDir } from "@/components/ViewShell";
@@ -38,6 +39,7 @@ export function DataView({ vsId }: { vsId: string }) {
 
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<LinkedDataElement | null>(null);
+  const [editingCatalog, setEditingCatalog] = useState<DataElement | null>(null);
   const [query, setQuery] = useState("");
   const [sortCol, setSortCol] = useState<string>("");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
@@ -200,7 +202,7 @@ export function DataView({ vsId }: { vsId: string }) {
                       <Td>—</Td>
                       <Td>—</Td>
                       <Td>
-                        <RowActions entityKey="data_elements" id={de.id} label={de.name} onEdit={() => {}} />
+                        <RowActions entityKey="data_elements" id={de.id} label={de.name} onEdit={() => setEditingCatalog(de)} />
                       </Td>
                     </Tr>
                   );
@@ -227,6 +229,36 @@ export function DataView({ vsId }: { vsId: string }) {
           vsId={vsId}
           availableDefs={dataElementDefs.data ?? []}
           initial={editing}
+          mode="define"
+        />
+      )}
+      {editingCatalog && (
+        <DataElementModal
+          open
+          onClose={() => setEditingCatalog(null)}
+          vsId={vsId}
+          availableDefs={dataElementDefs.data ?? []}
+          initial={{
+            id: editingCatalog.id,
+            data_element_id: editingCatalog.id,
+            step_id: "",
+            binding_point: "entry" as BindingPoint,
+            presence: "present" as Presence,
+            quality_notes: null,
+            is_key: false,
+            created_at: editingCatalog.created_at,
+            updated_at: editingCatalog.updated_at,
+            deleted_at: editingCatalog.deleted_at,
+            value_stream_id: editingCatalog.value_stream_id,
+            name: editingCatalog.name,
+            business_description: editingCatalog.business_description,
+            data_type: editingCatalog.data_type,
+            length: editingCatalog.length,
+            source_system: editingCatalog.source_system,
+            table_or_view: editingCatalog.table_or_view,
+            field_name: editingCatalog.field_name,
+            example_value: editingCatalog.example_value,
+          }}
           mode="define"
         />
       )}
