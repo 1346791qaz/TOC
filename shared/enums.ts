@@ -82,3 +82,22 @@ export type FlowNodeType = z.infer<typeof flowNodeTypeSchema>;
 export const EDGE_TYPES = ["sequence", "data_flow", "handoff", "dependency"] as const;
 export const edgeTypeSchema = z.enum(EDGE_TYPES);
 export type EdgeType = z.infer<typeof edgeTypeSchema>;
+
+export const ARTIFACT_TYPES = [
+  "document",
+  "spreadsheet",
+  "presentation",
+  "video",
+  "image",
+  "pdf",
+  "schematic",
+  "workbook",
+  "paper_file",
+  "other",
+] as const;
+export const artifactTypeSchema = z.enum(ARTIFACT_TYPES);
+export type ArtifactType = z.infer<typeof artifactTypeSchema>;
+
+export const ARTIFACT_FORMS = ["digital", "physical", "intangible"] as const;
+export const artifactFormSchema = z.enum(ARTIFACT_FORMS);
+export type ArtifactForm = z.infer<typeof artifactFormSchema>;

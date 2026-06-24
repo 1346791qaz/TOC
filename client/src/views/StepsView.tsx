@@ -1,11 +1,11 @@
 import { useMemo, useState } from "react";
-import { ArrowRight, Database, Layers, Pencil, Plus, X } from "lucide-react";
+import { ArrowRight, Database, FileStack, Layers, Pencil, Plus, X } from "lucide-react";
 import type { LinkedDataElement } from "@shared/gaps";
-import type { DataElement, Persona, ProcessStep, StepDataElement, StepPersona, ValueStream } from "@shared/schemas";
+import type { Artifact, DataElement, Persona, ProcessStep, StepArtifact, StepDataElement, StepPersona, ValueStream } from "@shared/schemas";
 import { linkDataElements } from "@shared/gaps";
 import { BINDING_POINTS, RACI_ROLES } from "@shared/enums";
 import { useCreate, useList, useSoftDelete } from "@/lib/queries";
-import { processStepFields } from "@/lib/entityConfig";
+import { artifactFields, processStepFields } from "@/lib/entityConfig";
 import { useUi } from "@/store";
 import { fmtNum } from "@/lib/utils";
 import { presenceTone, titleCase } from "@/lib/display";
@@ -29,6 +29,7 @@ export function StepsView({ vsId }: { vsId: string }) {
     where: { value_stream_id: vsId },
   });
   const allSDEs = useList<StepDataElement>("step_data_elements");
+  const artifactDefs = useList<Artifact>("artifacts", { where: { value_stream_id: vsId } });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editing, setEditing] = useState<ProcessStep | null>(null);
   const [creating, setCreating] = useState(false);
@@ -116,6 +117,7 @@ export function StepsView({ vsId }: { vsId: string }) {
               allSteps={allSteps}
               linkedElements={linkedElements}
               availableDefs={dataElementDefs.data ?? []}
+              artifactDefs={artifactDefs.data ?? []}
               onEdit={() => setEditing(selected)}
               onDrill={() => drillInto(selected.id)}
               onDrillChild={(childId) => drillInto(childId)}
@@ -175,6 +177,7 @@ function StepDetail({
   allSteps,
   linkedElements,
   availableDefs,
+  artifactDefs,
   onEdit,
   onDrill,
   onDrillChild,
@@ -185,6 +188,7 @@ function StepDetail({
   allSteps: ProcessStep[];
   linkedElements: LinkedDataElement[];
   availableDefs: DataElement[];
+  artifactDefs: Artifact[];
   onEdit: () => void;
   onDrill: () => void;
   onDrillChild: (childId: string) => void;
@@ -227,6 +231,7 @@ function StepDetail({
       <DataLandscape step={step} />
       <StepPersonas step={step} vsId={vsId} />
       <StepData step={step} vsId={vsId} linkedElements={linkedElements.filter((d) => d.step_id === step.id)} availableDefs={availableDefs} />
+      <StepArtifacts step={step} vsId={vsId} artifactDefs={artifactDefs} />
       <StepSubSteps step={step} vsId={vsId} allSteps={allSteps} onDrill={onDrill} onDrillChild={onDrillChild} />
     </div>
   );
@@ -530,6 +535,100 @@ function StepData({
           stepId={step.id}
           availableDefs={availableDefs}
           initial={editing}
+        />
+      )}
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Artifacts bound to this step
+// ---------------------------------------------------------------------------
+function StepArtifacts({
+  step,
+  vsId,
+  artifactDefs,
+}: {
+  step: ProcessStep;
+  vsId: string;
+  artifactDefs: Artifact[];
+}) {
+  const links = useList<StepArtifact>("step_artifacts", { where: { step_id: step.id } });
+  const create = useCreate("step_artifacts");
+  const del = useSoftDelete("step_artifacts");
+  const [artifactId, setArtifactId] = useState("");
+  const [creating, setCreating] = useState(false);
+
+  const artifactById = new Map(artifactDefs.map((a) => [a.id, a]));
+  const linkedIds = new Set((links.data ?? []).map((l) => l.artifact_id));
+  const available = artifactDefs.filter((a) => !linkedIds.has(a.id));
+
+  return (
+    <Card>
+      <div className="mb-2 flex items-center justify-between">
+        <p className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          <FileStack size={11} /> Artifacts
+        </p>
+      </div>
+      <div className="mb-2 space-y-1">
+        {(links.data ?? []).map((l) => {
+          const art = artifactById.get(l.artifact_id);
+          return (
+            <div key={l.id} className="flex items-center gap-2 rounded bg-muted/40 px-2 py-1 text-sm">
+              <span className="font-medium">{art?.name ?? "Unknown"}</span>
+              {art && (
+                <Badge tone="neutral">{art.form}</Badge>
+              )}
+              {art && (
+                <span className="text-xs text-muted-foreground">{titleCase(art.artifact_type.replace(/_/g, " "))}</span>
+              )}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="ml-auto h-6 w-6"
+                onClick={() => del.mutate(l.id)}
+              >
+                <X size={12} />
+              </Button>
+            </div>
+          );
+        })}
+        {(links.data ?? []).length === 0 && (
+          <p className="text-xs text-muted-foreground">No artifacts bound to this step.</p>
+        )}
+      </div>
+      <div className="flex gap-1.5">
+        <Select value={artifactId} onChange={(e) => setArtifactId(e.target.value)} className="h-8 flex-1">
+          <option value="">Bind artifact…</option>
+          {available.map((a) => (
+            <option key={a.id} value={a.id}>{a.name}</option>
+          ))}
+        </Select>
+        <Button
+          size="sm"
+          disabled={!artifactId}
+          onClick={() => {
+            create.mutate(
+              { step_id: step.id, artifact_id: artifactId },
+              { onSuccess: () => setArtifactId("") },
+            );
+          }}
+        >
+          Bind
+        </Button>
+        <Button size="sm" variant="subtle" onClick={() => setCreating(true)}>
+          <Plus size={12} /> New
+        </Button>
+      </div>
+
+      {creating && (
+        <EntityModalForm
+          open
+          onClose={() => setCreating(false)}
+          entityKey="artifacts"
+          title="New Artifact"
+          fields={artifactFields}
+          extra={{ value_stream_id: vsId }}
         />
       )}
     </Card>

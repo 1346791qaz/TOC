@@ -1,6 +1,7 @@
 import type { Edge, Node } from "@xyflow/react";
 import type { LinkedDataElement } from "@shared/gaps";
 import type {
+  Artifact,
   Constraint,
   FlowEdge,
   Persona,
@@ -26,6 +27,7 @@ export interface OilNodeData extends Record<string, unknown> {
   step?: ProcessStep;
   persona?: Persona;
   data?: LinkedDataElement;
+  artifact?: Artifact;
   // Attached-cell layout extras
   roleOnStep?: string;
   deptColor?: string;

@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/primitives";
 const ENTITY_LABELS: Partial<Record<EntityKey, string>> = {
   db_connections: "Database Connections",
   step_data_elements: "Data Bindings",
+  step_artifacts: "Artifact Bindings",
 };
 
 function entityLabel(key: EntityKey): string {
@@ -22,6 +23,8 @@ const GENERIC_TRASH_KEYS: EntityKey[] = [
   "process_steps",
   "personas",
   "step_personas",
+  "artifacts",
+  "step_artifacts",
   "constraints",
   "metrics",
   "assumptions",

@@ -1,4 +1,6 @@
 import {
+  ARTIFACT_FORMS,
+  ARTIFACT_TYPES,
   ASSUMPTION_STATUSES,
   BINDING_POINTS,
   METRIC_TYPES,
@@ -401,6 +403,13 @@ export const metricFields: FieldDef[] = [
   { name: "current_value", label: "Current", type: "number" },
   { name: "target_value", label: "Target", type: "number" },
   { name: "source", label: "Source", type: "text", full: true },
+];
+
+export const artifactFields: FieldDef[] = [
+  { name: "name", label: "Artifact name", type: "text", required: true, full: true },
+  { name: "artifact_type", label: "Type", type: "select", options: ARTIFACT_TYPES },
+  { name: "form", label: "Form", type: "select", options: ARTIFACT_FORMS },
+  { name: "description", label: "Description", type: "textarea", full: true },
 ];
 
 export const assumptionFields: FieldDef[] = [

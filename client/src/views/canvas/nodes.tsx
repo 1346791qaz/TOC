@@ -1,7 +1,7 @@
 import { Handle, Position, type NodeProps, type EdgeProps } from "@xyflow/react";
-import { AlertTriangle, ChevronDown, ChevronRight, Database, GripHorizontal, User, Workflow } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronRight, Database, FileStack, GripHorizontal, User, Workflow } from "lucide-react";
 import { fmtNum } from "@/lib/utils";
-import { presenceTone } from "@/lib/display";
+import { presenceTone, titleCase } from "@/lib/display";
 import { useUi } from "@/store";
 import { Badge } from "@/components/ui/primitives";
 import type { OilNodeData } from "./buildGraph";
@@ -276,12 +276,53 @@ export function DataCell({ data, selected }: NodeProps) {
   );
 }
 
+// Artifact cell: distinct amber/orange border + a file-stack chip.
+export function ArtifactCell({ data, selected }: NodeProps) {
+  const d = data as OilNodeData;
+  const art = d.artifact;
+  const accent = "hsl(38 85% 55%)";
+  return (
+    <div
+      data-testid="oilnode-artifact"
+      className="relative box-border flex items-stretch gap-1.5 overflow-hidden rounded-md border border-dashed px-0 py-0"
+      style={{
+        width: 200,
+        height: 40,
+        borderColor: accent,
+        background: "hsl(38 40% 8%)",
+        outline: selected ? "2px solid hsl(38 92% 52%)" : undefined,
+      }}
+    >
+      <div
+        className="flex w-7 shrink-0 items-center justify-center"
+        style={{ background: accent, color: "hsl(38 40% 8%)" }}
+      >
+        <FileStack size={13} />
+      </div>
+      <div className="min-w-0 flex-1 py-1 pr-1.5">
+        <div className="flex items-center gap-1">
+          <span className="truncate text-xs font-semibold">{d.label}</span>
+        </div>
+        {art && (
+          <div className="mt-0.5 flex items-center gap-1">
+            <Badge tone="neutral">{art.form}</Badge>
+            <span className="truncate text-[10px] text-muted-foreground">
+              {titleCase(art.artifact_type.replace(/_/g, " "))}
+            </span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export const nodeTypes = {
   step: StepNode,
   persona: PersonaNode,
   data_element: DataNode,
   personaCell: PersonaCell,
   dataCell: DataCell,
+  artifactCell: ArtifactCell,
   deptBg: DeptBackground,
 };
 
