@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, ChevronRight, Database, Loader2, Plus, Search, Table2 } from "lucide-react";
+import { ArrowLeft, Check, ChevronRight, Database, Loader2, Plus, Search, Table2, X } from "lucide-react";
 import type { DataElement, DbConnection } from "@shared/schemas";
 import { BINDING_POINTS, PRESENCE } from "@shared/enums";
 import { ApiError } from "@/lib/api";
 import { useCreate, useList } from "@/lib/queries";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/primitives";
+import { Combobox } from "@/components/ui/Combobox";
 import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
@@ -22,17 +23,35 @@ interface SchemaInfo { schema: string }
 interface TableInfo  { table_name: string; table_type: string }
 
 interface ElementSettings {
-  binding_point: string;
+  binding_points: string[];
   presence: string;
   is_key: boolean;
   quality_notes: string;
 }
 
 const DEFAULT_SETTINGS: ElementSettings = {
-  binding_point: "entry",
-  presence:      "present",
-  is_key:        false,
-  quality_notes: "",
+  binding_points: ["entry"],
+  presence:       "present",
+  is_key:         false,
+  quality_notes:  "",
+};
+
+// ---------------------------------------------------------------------------
+// Catalog filter panel types
+// ---------------------------------------------------------------------------
+
+type CatalogFieldKey = "name" | "source_system" | "table_or_view" | "field_name" | "data_type";
+
+const CATALOG_FILTER_DEFS: { key: CatalogFieldKey; label: string }[] = [
+  { key: "name",          label: "Name" },
+  { key: "source_system", label: "Source" },
+  { key: "table_or_view", label: "Table / View" },
+  { key: "field_name",    label: "Field" },
+  { key: "data_type",     label: "Type" },
+];
+
+const EMPTY_CATALOG: Record<CatalogFieldKey, string> = {
+  name: "", source_system: "", table_or_view: "", field_name: "", data_type: "",
 };
 
 // ---------------------------------------------------------------------------
@@ -46,6 +65,96 @@ async function fetchJson<T>(url: string): Promise<T> {
     throw new Error(body.error ?? `Request failed (${res.status})`);
   }
   return res.json() as Promise<T>;
+}
+
+// ---------------------------------------------------------------------------
+// CatalogFilterPanel — left-panel field filters for Catalog mode
+// ---------------------------------------------------------------------------
+
+function CatalogFilterPanel({
+  availableDefs,
+  alreadyBoundIds,
+  catalogDraft,
+  setCatalogDraft,
+  catalogActive,
+  setCatalogActive,
+}: {
+  availableDefs: DataElement[];
+  alreadyBoundIds: Set<string>;
+  catalogDraft: Record<CatalogFieldKey, string>;
+  setCatalogDraft: React.Dispatch<React.SetStateAction<Record<CatalogFieldKey, string>>>;
+  catalogActive: Record<CatalogFieldKey, string>;
+  setCatalogActive: React.Dispatch<React.SetStateAction<Record<CatalogFieldKey, string>>>;
+}) {
+  const unboundElements = useMemo(
+    () => availableDefs.filter((d) => !alreadyBoundIds.has(d.id)),
+    [availableDefs, alreadyBoundIds],
+  );
+
+  function getOptions(key: CatalogFieldKey): string[] {
+    // Faceted: apply all OTHER active filters, then list unique values for this field
+    let filtered = unboundElements;
+    for (const { key: fk } of CATALOG_FILTER_DEFS) {
+      if (fk === key) continue;
+      const v = catalogActive[fk].trim().toLowerCase();
+      if (v) filtered = filtered.filter((d) => (d[fk] ?? "").toLowerCase().includes(v));
+    }
+    const vals = filtered.map((d) => d[key] ?? "").filter(Boolean) as string[];
+    return [...new Set(vals)].sort();
+  }
+
+  return (
+    <div className="space-y-2 py-2">
+      {CATALOG_FILTER_DEFS.map(({ key, label }) => {
+        const isActive = catalogActive[key].trim() !== "";
+        return (
+          <div key={key} className="px-1">
+            <p className="pb-0.5 pl-1 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
+              {label}
+            </p>
+            <div className="flex items-center gap-0.5">
+              <Combobox
+                value={catalogDraft[key]}
+                onChange={(v) => setCatalogDraft((prev) => ({ ...prev, [key]: v }))}
+                options={getOptions(key)}
+                placeholder="filter…"
+                className={cn(
+                  "h-6 flex-1 !rounded !border !bg-input !px-2 !py-0 !text-xs",
+                  isActive ? "!border-primary/60" : "!border-border",
+                )}
+              />
+              <button
+                type="button"
+                title="Apply filter"
+                onClick={() =>
+                  setCatalogActive((prev) => ({ ...prev, [key]: catalogDraft[key] }))
+                }
+                className={cn(
+                  "flex h-6 w-6 shrink-0 items-center justify-center rounded text-[10px] transition-colors",
+                  isActive
+                    ? "bg-primary/10 text-primary hover:bg-primary/20"
+                    : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+                )}
+              >
+                <Check size={10} />
+              </button>
+              <button
+                type="button"
+                title="Clear filter"
+                onClick={() => {
+                  setCatalogDraft((prev) => ({ ...prev, [key]: "" }));
+                  setCatalogActive((prev) => ({ ...prev, [key]: "" }));
+                }}
+                className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-[10px] text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+              >
+                <X size={10} />
+              </button>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -171,14 +280,6 @@ function FilterNav({
 
   return (
     <div className="py-1">
-      {/* All */}
-      <NavItem
-        icon={<Database size={12} className="shrink-0" />}
-        label="All elements"
-        selected={filter.type === "all"}
-        onClick={() => setFilter({ type: "all" })}
-      />
-
       {connections.length === 0 && (
         <p className="px-2 pt-2 text-[11px] text-muted-foreground">No connections.</p>
       )}
@@ -288,6 +389,7 @@ export function BindDataModal({
   stepName,
   availableDefs,
   alreadyBoundIds,
+  usedBindingPoints,
   onDefineNew,
 }: {
   open: boolean;
@@ -297,30 +399,36 @@ export function BindDataModal({
   stepName?: string;
   availableDefs: DataElement[];
   alreadyBoundIds: Set<string>;
+  /** Maps data_element_id → set of binding points already used at this step. */
+  usedBindingPoints?: Map<string, Set<string>>;
   onDefineNew?: () => void;
 }) {
   const connections = useList<DbConnection>("db_connections", { where: { value_stream_id: vsId } });
   const createSDE   = useCreate("step_data_elements");
 
-  const [phase,     setPhase]     = useState<Phase>("browse");
-  const [leftMode,  setLeftMode]  = useState<"connections" | "catalog">("connections");
-  const [filter,    setFilter]    = useState<FilterState>({ type: "all" });
-  const [search,    setSearch]    = useState("");
-  const [selected,  setSelected]  = useState<Set<string>>(new Set());
-  const [perElem,   setPerElem]   = useState<Record<string, ElementSettings>>({});
-  const [error,     setError]     = useState<string | null>(null);
-  const [saving,    setSaving]    = useState(false);
+  const [phase,          setPhase]          = useState<Phase>("browse");
+  const [leftMode,       setLeftMode]       = useState<"connections" | "catalog">("catalog");
+  const [filter,         setFilter]         = useState<FilterState>({ type: "all" });
+  const [search,         setSearch]         = useState("");
+  const [selected,       setSelected]       = useState<Set<string>>(new Set());
+  const [perElem,        setPerElem]        = useState<Record<string, ElementSettings>>({});
+  const [error,          setError]          = useState<string | null>(null);
+  const [saving,         setSaving]         = useState(false);
+  const [catalogDraft,   setCatalogDraft]   = useState<Record<CatalogFieldKey, string>>(EMPTY_CATALOG);
+  const [catalogActive,  setCatalogActive]  = useState<Record<CatalogFieldKey, string>>(EMPTY_CATALOG);
 
   useEffect(() => {
     if (open) {
       setPhase("browse");
-      setLeftMode("connections");
+      setLeftMode("catalog");
       setFilter({ type: "all" });
       setSearch("");
       setSelected(new Set());
       setPerElem({});
       setError(null);
       setSaving(false);
+      setCatalogDraft(EMPTY_CATALOG);
+      setCatalogActive(EMPTY_CATALOG);
     }
   }, [open]);
 
@@ -328,7 +436,14 @@ export function BindDataModal({
     setPerElem((prev) => {
       const next: Record<string, ElementSettings> = {};
       for (const id of selected) {
-        next[id] = prev[id] ?? { ...DEFAULT_SETTINGS };
+        if (prev[id]) {
+          next[id] = prev[id];
+        } else {
+          // Pre-select only the binding points not already used for this element
+          const used = usedBindingPoints?.get(id) ?? new Set<string>();
+          const available = BINDING_POINTS.filter((bp) => !used.has(bp));
+          next[id] = { ...DEFAULT_SETTINGS, binding_points: available.length > 0 ? available : ["entry"] };
+        }
       }
       return next;
     });
@@ -363,6 +478,14 @@ export function BindDataModal({
       );
     }
 
+    // Catalog mode: apply per-field active filters
+    if (leftMode === "catalog") {
+      for (const { key } of CATALOG_FILTER_DEFS) {
+        const v = catalogActive[key].trim().toLowerCase();
+        if (v) list = list.filter((d) => (d[key] ?? "").toLowerCase().includes(v));
+      }
+    }
+
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       list = list.filter(
@@ -370,12 +493,13 @@ export function BindDataModal({
           d.name.toLowerCase().includes(q) ||
           (d.field_name ?? "").toLowerCase().includes(q) ||
           (d.table_or_view ?? "").toLowerCase().includes(q) ||
-          (d.business_description ?? "").toLowerCase().includes(q),
+          (d.business_description ?? "").toLowerCase().includes(q) ||
+          `${d.table_or_view ?? ""}.${d.field_name ?? ""}`.toLowerCase().includes(q),
       );
     }
 
     return list;
-  }, [availableDefs, alreadyBoundIds, filter, search]);
+  }, [availableDefs, alreadyBoundIds, filter, search, leftMode, catalogActive]);
 
   const filteredBound = useMemo(() => {
     let list = availableDefs.filter((d) => alreadyBoundIds.has(d.id));
@@ -393,8 +517,15 @@ export function BindDataModal({
       );
     }
 
+    if (leftMode === "catalog") {
+      for (const { key } of CATALOG_FILTER_DEFS) {
+        const v = catalogActive[key].trim().toLowerCase();
+        if (v) list = list.filter((d) => (d[key] ?? "").toLowerCase().includes(v));
+      }
+    }
+
     return list;
-  }, [availableDefs, alreadyBoundIds, filter]);
+  }, [availableDefs, alreadyBoundIds, filter, leftMode, catalogActive]);
 
   // ---- Selection ----
 
@@ -419,7 +550,7 @@ export function BindDataModal({
     }
   }
 
-  // ---- Save (per-element junction creation) ----
+  // ---- Save (per-element junction creation, one row per binding_point) ----
 
   async function handleBind() {
     setSaving(true);
@@ -427,19 +558,21 @@ export function BindDataModal({
     try {
       for (const deId of selected) {
         const s = perElem[deId] ?? DEFAULT_SETTINGS;
-        await new Promise<void>((resolve, reject) => {
-          createSDE.mutate(
-            {
-              step_id: stepId,
-              data_element_id: deId,
-              binding_point: s.binding_point,
-              presence:       s.presence,
-              is_key:         s.is_key,
-              quality_notes:  s.quality_notes || null,
-            },
-            { onSuccess: () => resolve(), onError: reject },
-          );
-        });
+        for (const bp of s.binding_points) {
+          await new Promise<void>((resolve, reject) => {
+            createSDE.mutate(
+              {
+                step_id:          stepId,
+                data_element_id:  deId,
+                binding_point:    bp,
+                presence:         s.presence,
+                is_key:           s.is_key,
+                quality_notes:    s.quality_notes || null,
+              },
+              { onSuccess: () => resolve(), onError: reject },
+            );
+          });
+        }
       }
       onClose();
     } catch (e) {
@@ -499,23 +632,15 @@ export function BindDataModal({
         <div className="flex h-[52vh] gap-0 overflow-hidden rounded-md border border-border">
           {/* Left: Navigator */}
           <div className="w-52 shrink-0 flex flex-col border-r border-border bg-muted/20">
-            {/* Tab toggle */}
+            {/* Tab toggle — Catalog first */}
             <div className="flex shrink-0 border-b border-border">
               <button
                 type="button"
-                onClick={() => setLeftMode("connections")}
-                className={cn(
-                  "flex-1 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider transition-colors",
-                  leftMode === "connections"
-                    ? "bg-primary/10 text-foreground"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                Connections
-              </button>
-              <button
-                type="button"
-                onClick={() => { setLeftMode("catalog"); setFilter({ type: "all" }); setSearch(""); }}
+                onClick={() => {
+                  setLeftMode("catalog");
+                  setFilter({ type: "all" });
+                  setSearch("");
+                }}
                 className={cn(
                   "flex-1 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider transition-colors",
                   leftMode === "catalog"
@@ -524,6 +649,22 @@ export function BindDataModal({
                 )}
               >
                 Catalog
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setLeftMode("connections");
+                  setCatalogDraft(EMPTY_CATALOG);
+                  setCatalogActive(EMPTY_CATALOG);
+                }}
+                className={cn(
+                  "flex-1 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider transition-colors",
+                  leftMode === "connections"
+                    ? "bg-primary/10 text-foreground"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                Connections
               </button>
             </div>
             <div className="flex-1 overflow-y-auto px-1">
@@ -534,12 +675,14 @@ export function BindDataModal({
                   setFilter={(f) => { setFilter(f); setSearch(""); }}
                 />
               ) : (
-                <div className="py-2 px-1">
-                  <p className="px-1 pb-1 text-[10px] text-muted-foreground">
-                    All {availableDefs.filter(d => !alreadyBoundIds.has(d.id)).length} unbound elements shown.
-                    Select in the list on the right.
-                  </p>
-                </div>
+                <CatalogFilterPanel
+                  availableDefs={availableDefs}
+                  alreadyBoundIds={alreadyBoundIds}
+                  catalogDraft={catalogDraft}
+                  setCatalogDraft={setCatalogDraft}
+                  catalogActive={catalogActive}
+                  setCatalogActive={setCatalogActive}
+                />
               )}
             </div>
           </div>
@@ -594,6 +737,7 @@ export function BindDataModal({
                   {filteredUnbound.map((d) => {
                     const checked = selected.has(d.id);
                     const loc = [d.table_or_view, d.field_name].filter(Boolean).join(".");
+                    const partialBps = usedBindingPoints?.get(d.id);
                     return (
                       <div
                         key={d.id}
@@ -610,7 +754,14 @@ export function BindDataModal({
                           readOnly
                         />
                         <div className="min-w-0">
-                          <p className="truncate font-medium">{d.name}</p>
+                          <div className="flex items-center gap-1">
+                            <p className="truncate font-medium">{d.name}</p>
+                            {partialBps && partialBps.size > 0 && (
+                              <span className="shrink-0 text-[9px] font-semibold uppercase tracking-wider text-primary/70">
+                                +{[...partialBps].join(",")}
+                              </span>
+                            )}
+                          </div>
                           {d.business_description && (
                             <p className="truncate text-[11px] text-muted-foreground">
                               {d.business_description}
@@ -684,7 +835,7 @@ export function BindDataModal({
     >
       <div className="space-y-3">
         <p className="text-xs text-muted-foreground">
-          Set how each element is used at this step. Changes here only affect this step binding.
+          Set how each element is used at this step. One junction record is created per binding point.
         </p>
         <div className="max-h-[60vh] space-y-2 overflow-y-auto pr-1">
           {selectedDefs.map((d) => {
@@ -705,25 +856,53 @@ export function BindDataModal({
                   )}
                 </div>
 
-                {/* Binding point + Presence row */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                      Binding point
-                    </label>
-                    <select
-                      className="w-full rounded border border-border bg-input px-2 py-1.5 text-sm outline-none focus:ring-1 focus:ring-ring"
-                      value={s.binding_point}
-                      onChange={(e) => setElemField(d.id, "binding_point", e.target.value)}
-                    >
-                      {BINDING_POINTS.map((bp) => (
-                        <option key={bp} value={bp}>
-                          {bp.charAt(0).toUpperCase() + bp.slice(1)}
-                          {bp === "entry" ? " (source)" : " (target)"}
-                        </option>
-                      ))}
-                    </select>
+                {/* Binding points — multi-checkbox */}
+                <div>
+                  <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Binding points
+                  </label>
+                  <div className="flex flex-wrap gap-4">
+                    {BINDING_POINTS.map((bp) => {
+                      const alreadyUsed = usedBindingPoints?.get(d.id)?.has(bp) ?? false;
+                      const checked = alreadyUsed || s.binding_points.includes(bp);
+                      return (
+                        <label
+                          key={bp}
+                          className={cn(
+                            "flex cursor-pointer items-center gap-1.5 text-sm",
+                            alreadyUsed && "cursor-default opacity-50",
+                          )}
+                        >
+                          <input
+                            type="checkbox"
+                            className="h-3.5 w-3.5 rounded border-border"
+                            checked={checked}
+                            disabled={alreadyUsed}
+                            onChange={(e) => {
+                              if (alreadyUsed) return;
+                              const next = e.target.checked
+                                ? [...s.binding_points, bp]
+                                : s.binding_points.filter((p) => p !== bp);
+                              setElemField(d.id, "binding_points", next);
+                            }}
+                          />
+                          <span className="whitespace-nowrap text-xs font-medium">
+                            {bp.charAt(0).toUpperCase() + bp.slice(1)}
+                            {bp === "entry" ? " (source)" : " (target)"}
+                          </span>
+                          {alreadyUsed && (
+                            <span className="text-[9px] font-normal text-muted-foreground/70">
+                              already bound
+                            </span>
+                          )}
+                        </label>
+                      );
+                    })}
                   </div>
+                </div>
+
+                {/* Presence row */}
+                <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                       Presence
@@ -740,31 +919,31 @@ export function BindDataModal({
                       ))}
                     </select>
                   </div>
+                  <div className="flex items-end pb-1">
+                    <label className="flex cursor-pointer items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        className="h-3.5 w-3.5 rounded border-border"
+                        checked={s.is_key}
+                        onChange={(e) => setElemField(d.id, "is_key", e.target.checked)}
+                      />
+                      <span className="whitespace-nowrap text-xs font-medium">Key data component</span>
+                    </label>
+                  </div>
                 </div>
 
-                {/* Is key + Quality notes row */}
-                <div className="grid grid-cols-[auto_1fr] items-start gap-4">
-                  <label className="flex cursor-pointer items-center gap-2 pt-1 text-sm">
-                    <input
-                      type="checkbox"
-                      className="h-3.5 w-3.5 rounded border-border"
-                      checked={s.is_key}
-                      onChange={(e) => setElemField(d.id, "is_key", e.target.checked)}
-                    />
-                    <span className="whitespace-nowrap text-xs font-medium">Key data component</span>
+                {/* Quality notes */}
+                <div>
+                  <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Quality notes
                   </label>
-                  <div>
-                    <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                      Quality notes
-                    </label>
-                    <textarea
-                      rows={2}
-                      className="w-full rounded border border-border bg-input px-2 py-1 text-sm outline-none focus:ring-1 focus:ring-ring"
-                      placeholder="Optional — known quality issues, transformations, gaps…"
-                      value={s.quality_notes}
-                      onChange={(e) => setElemField(d.id, "quality_notes", e.target.value)}
-                    />
-                  </div>
+                  <textarea
+                    rows={2}
+                    className="w-full rounded border border-border bg-input px-2 py-1 text-sm outline-none focus:ring-1 focus:ring-ring"
+                    placeholder="Optional — known quality issues, transformations, gaps…"
+                    value={s.quality_notes}
+                    onChange={(e) => setElemField(d.id, "quality_notes", e.target.value)}
+                  />
                 </div>
               </div>
             );
