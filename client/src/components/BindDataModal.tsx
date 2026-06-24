@@ -501,32 +501,6 @@ export function BindDataModal({
     return list;
   }, [availableDefs, alreadyBoundIds, filter, search, leftMode, catalogActive]);
 
-  const filteredBound = useMemo(() => {
-    let list = availableDefs.filter((d) => alreadyBoundIds.has(d.id));
-
-    if (filter.type === "conn" || filter.type === "schema") {
-      const name = filter.connName.toLowerCase();
-      list = list.filter((d) => d.source_system?.toLowerCase() === name);
-    } else if (filter.type === "table") {
-      const name  = filter.connName.toLowerCase();
-      const table = filter.table.toLowerCase();
-      list = list.filter(
-        (d) =>
-          d.source_system?.toLowerCase() === name &&
-          (d.table_or_view?.toLowerCase().includes(table) ?? false),
-      );
-    }
-
-    if (leftMode === "catalog") {
-      for (const { key } of CATALOG_FILTER_DEFS) {
-        const v = catalogActive[key].trim().toLowerCase();
-        if (v) list = list.filter((d) => (d[key] ?? "").toLowerCase().includes(v));
-      }
-    }
-
-    return list;
-  }, [availableDefs, alreadyBoundIds, filter, leftMode, catalogActive]);
-
   // ---- Selection ----
 
   function toggleOne(id: string, e: React.MouseEvent) {
