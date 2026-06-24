@@ -212,18 +212,13 @@ export function seed(): { seeded: boolean; subStepsAdded: number } {
 
   // ---- data elements (with deliberate gaps) -----------------------------
   // Each entry defines the field (data_elements) and its step binding (step_data_elements).
+  // Document/file artifacts are seeded in the artifacts section below.
   type DEDef = { step_id: string; name: string; binding_point: string; data_type?: string; source_system?: string; presence: string; quality_notes?: string; is_key: boolean };
   const de: DEDef[] = [
-    { step_id: ID.steps.intake, name: "Customer drawing rev", binding_point: "entry", data_type: "PDF", source_system: "PLM", presence: "present", is_key: true },
-    { step_id: ID.steps.intake, name: "Promised ship date", binding_point: "exit", data_type: "date", source_system: "ERP", presence: "partial", quality_notes: "Often a placeholder, refined later", is_key: true },
-    { step_id: ID.steps.material, name: "Material certs", binding_point: "entry", data_type: "doc", source_system: "Supplier portal", presence: "missing", quality_notes: "Certs arrive late, block traceability", is_key: true },
-    { step_id: ID.steps.cnc, name: "CNC program", binding_point: "entry", data_type: "G-code", source_system: "CAM", presence: "present", is_key: true },
-    { step_id: ID.steps.cnc, name: "Actual cycle time", binding_point: "exit", data_type: "number", source_system: "MES", presence: "partial", quality_notes: "Logged inconsistently per operator", is_key: false },
-    { step_id: ID.steps.inspect, name: "Inspection plan", binding_point: "entry", data_type: "doc", source_system: "Paper traveler", presence: "missing", quality_notes: "No standardized plan; inspector improvises", is_key: true },
-    { step_id: ID.steps.inspect, name: "CMM results", binding_point: "action", data_type: "report", source_system: "CMM", presence: "partial", quality_notes: "Stored locally, not linked to job", is_key: true },
-    { step_id: ID.steps.inspect, name: "Disposition record", binding_point: "exit", data_type: "status", source_system: "None", presence: "missing", quality_notes: "Verbal pass/fail; not captured", is_key: true },
-    { step_id: ID.steps.finish, name: "Coating spec", binding_point: "entry", data_type: "doc", source_system: "PLM", presence: "present", is_key: false },
-    { step_id: ID.steps.ship, name: "Shipping docs", binding_point: "exit", data_type: "doc", source_system: "ERP", presence: "present", is_key: false },
+    { step_id: ID.steps.intake,  name: "Promised ship date", binding_point: "exit",  data_type: "date",   source_system: "ERP",  presence: "partial", quality_notes: "Often a placeholder, refined later", is_key: true },
+    { step_id: ID.steps.cnc,     name: "CNC program",        binding_point: "entry", data_type: "G-code", source_system: "CAM",  presence: "present", is_key: true },
+    { step_id: ID.steps.cnc,     name: "Actual cycle time",  binding_point: "exit",  data_type: "number", source_system: "MES",  presence: "partial", quality_notes: "Logged inconsistently per operator", is_key: false },
+    { step_id: ID.steps.inspect, name: "Disposition record", binding_point: "exit",  data_type: "status", source_system: "None", presence: "missing", quality_notes: "Verbal pass/fail; not captured", is_key: true },
   ];
   for (const d of de) {
     const def = repos.data_elements.create({
@@ -245,6 +240,27 @@ export function seed(): { seeded: boolean; subStepsAdded: number } {
       quality_notes: d.quality_notes ?? null,
       is_key: d.is_key,
     });
+  }
+
+  // ---- artifacts (document and file items that move through the stream) -----
+  type ArtDef = { step_id: string; name: string; artifact_type: string; form: string; description?: string };
+  const arts: ArtDef[] = [
+    { step_id: ID.steps.intake,   name: "Customer drawing rev", artifact_type: "pdf",      form: "digital",  description: "Source: PLM. Customer-supplied drawing revision required at order entry." },
+    { step_id: ID.steps.material, name: "Material certs",       artifact_type: "document", form: "digital",  description: "Source: Supplier portal. Certs arrive late, blocking traceability." },
+    { step_id: ID.steps.inspect,  name: "Inspection plan",      artifact_type: "document", form: "physical", description: "Source: Paper traveler. No standardized plan exists; inspector improvises each time." },
+    { step_id: ID.steps.inspect,  name: "CMM results",          artifact_type: "document", form: "digital",  description: "Source: CMM. Stored locally on the CMM, not linked to the job record." },
+    { step_id: ID.steps.finish,   name: "Coating spec",         artifact_type: "document", form: "digital",  description: "Source: PLM." },
+    { step_id: ID.steps.ship,     name: "Shipping docs",        artifact_type: "document", form: "digital",  description: "Source: ERP." },
+  ];
+  for (const a of arts) {
+    const art = repos.artifacts.create({
+      value_stream_id: ID.vs,
+      name: a.name,
+      artifact_type: a.artifact_type as never,
+      form: a.form as never,
+      description: a.description ?? null,
+    });
+    repos.step_artifacts.create({ step_id: a.step_id, artifact_id: art.id });
   }
 
   // ---- constraints ------------------------------------------------------

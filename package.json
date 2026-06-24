@@ -13,6 +13,7 @@
     "migrate": "tsx server/src/db/migrate.ts",
     "clear-agreements": "tsx server/src/db/clear-agreements.ts",
     "seed": "tsx server/src/db/seed.ts",
+    "reset": "node -e \"const fs=require('fs');const p='data/oil.sqlite';if(fs.existsSync(p)){fs.unlinkSync(p);console.log('Database deleted.');}else{console.log('No database found — starting fresh.');}\" && npm run seed",
     "typecheck": "tsc -b --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
