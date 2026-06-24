@@ -55,6 +55,8 @@ export const api = {
   remove: (key: EntityKey, id: string) => request<void>(`/${key}/${id}`, { method: "DELETE" }),
   restore: <T>(key: EntityKey, id: string) =>
     request<T>(`/${key}/${id}/restore`, { method: "POST" }),
+  cascadeTrashConnection: (id: string) =>
+    request<{ de_count: number; sde_count: number }>(`/db_connections/${id}/trash-cascade`, { method: "POST" }),
 
   // analytics
   gaps: (vsId: string) => request<DataGapReport>(`/analytics/gaps/${vsId}`),

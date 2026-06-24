@@ -57,6 +57,14 @@ export function useRestore<T>(key: EntityKey) {
   });
 }
 
+export function useCascadeTrashConnection() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.cascadeTrashConnection(id),
+    onSuccess: () => invalidateAll(qc),
+  });
+}
+
 export function useGaps(vsId: string | null) {
   return useQuery({
     queryKey: ["analytics", "gaps", vsId],

@@ -10,8 +10,9 @@ import {
   Trash2,
   XCircle,
 } from "lucide-react";
-import type { DbConnection, DbDriverType } from "@shared/schemas";
-import { useCreate, useList, useSoftDelete, useUpdate } from "@/lib/queries";
+import type { DataElement, DbConnection, DbDriverType, StepDataElement } from "@shared/schemas";
+import { useCascadeTrashConnection, useCreate, useList, useRestore, useSoftDelete, useUpdate } from "@/lib/queries";
+import { api } from "@/lib/api";
 import { ViewShell, EmptyHint } from "@/components/ViewShell";
 import { Modal } from "@/components/ui/modal";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -583,28 +584,86 @@ function TestBadge({ status, latency }: { status: TestStatus; latency: number | 
 
 export function ConnectionsView({ vsId }: { vsId: string }) {
   const connections = useList<DbConnection>("db_connections", { where: { value_stream_id: vsId } });
-  const createConn  = useCreate("db_connections");
-  const updateConn  = useUpdate("db_connections");
-  const del         = useSoftDelete("db_connections");
+  const createConn     = useCreate("db_connections");
+  const updateConn     = useUpdate("db_connections");
+  const del            = useSoftDelete("db_connections");
+  const restoreConn    = useRestore<DbConnection>("db_connections");
+  const cascadeTrash   = useCascadeTrashConnection();
 
-  const [showForm,       setShowForm]       = useState(false);
-  const [editingConn,    setEditingConn]    = useState<DbConnection | null>(null);
-  const [confirmingConn, setConfirmingConn] = useState<DbConnection | null>(null);
+  const [showForm,            setShowForm]            = useState(false);
+  const [editingConn,         setEditingConn]         = useState<DbConnection | null>(null);
+  const [confirmingConn,      setConfirmingConn]      = useState<DbConnection | null>(null);
+  const [cascadeConfirm,      setCascadeConfirm]      = useState<{ conn: DbConnection; deCount: number } | null>(null);
+  const [matchingTrashedConn, setMatchingTrashedConn] = useState<{ conn: DbConnection; pendingForm: ConnectionFormState } | null>(null);
   const [formError,   setFormError]   = useState<string | null>(null);
   const [saving,      setSaving]      = useState(false);
   const [testStatus,  setTestStatus]  = useState<Record<string, TestStatus>>({});
   const [testLatency, setTestLatency] = useState<Record<string, number | null>>({});
   const [testError,   setTestError]   = useState<Record<string, string | undefined>>({});
 
-  const list = useMemo(() => connections.data ?? [], [connections.data]);
+  const list    = useMemo(() => connections.data ?? [], [connections.data]);
+  const allDEs  = useList<DataElement>("data_elements", { where: { value_stream_id: vsId } });
+  const allSDEs = useList<StepDataElement>("step_data_elements");
+
+  // Count live data elements and step bindings per connection.
+  const { deCount, sdeCount } = useMemo(() => {
+    const deCount:  Record<string, number> = {};
+    const deToConn: Record<string, string> = {};
+
+    for (const de of (allDEs.data ?? [])) {
+      if (de.db_connection_id) {
+        deCount[de.db_connection_id] = (deCount[de.db_connection_id] ?? 0) + 1;
+        deToConn[de.id] = de.db_connection_id;
+      }
+    }
+
+    const sdeCount: Record<string, number> = {};
+    for (const sde of (allSDEs.data ?? [])) {
+      const connId = deToConn[sde.data_element_id];
+      if (connId) sdeCount[connId] = (sdeCount[connId] ?? 0) + 1;
+    }
+
+    return { deCount, sdeCount };
+  }, [allDEs.data, allSDEs.data]);
 
   useEffect(() => {
     if (!showForm && !editingConn) setFormError(null);
   }, [showForm, editingConn]);
 
-  function handleCreate(form: ConnectionFormState) {
+  async function handleCreate(form: ConnectionFormState) {
     setSaving(true);
     setFormError(null);
+
+    // Check for a matching trashed connection before creating
+    try {
+      const trashed = await api.list<DbConnection>("db_connections", {
+        trashed: true,
+        where: { value_stream_id: vsId },
+      });
+      const match = trashed.find(
+        (c) =>
+          c.driver_type === form.driver_type &&
+          (c.host ?? "") === form.host &&
+          (c.port != null ? String(c.port) : "") === form.port &&
+          (c.username ?? "") === form.username,
+      );
+      if (match) {
+        setSaving(false);
+        setMatchingTrashedConn({ conn: match, pendingForm: form });
+        return;
+      }
+    } catch {
+      // If the check fails, just proceed with creation
+    }
+
+    createConn.mutate(formToPayload(form, vsId), {
+      onSuccess: () => { setSaving(false); setShowForm(false); },
+      onError:   (e) => { setSaving(false); setFormError(String(e)); },
+    });
+  }
+
+  function proceedWithCreate(form: ConnectionFormState) {
+    setSaving(true);
     createConn.mutate(formToPayload(form, vsId), {
       onSuccess: () => { setSaving(false); setShowForm(false); },
       onError:   (e) => { setSaving(false); setFormError(String(e)); },
@@ -659,36 +718,56 @@ export function ConnectionsView({ vsId }: { vsId: string }) {
             const meta     = DRIVER_META[driver] ?? DRIVER_META.other;
             const disabled = testStatus[conn.id] === "testing" || !!meta.noLiveTest;
             return (
-              <div key={conn.id} className="flex items-center gap-3 rounded-lg border border-border bg-surface px-4 py-3">
-                <Database size={18} className={meta.color} />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium">{conn.name}</p>
-                  <p className="truncate text-xs text-muted-foreground">
-                    {meta.label}
-                    {conn.host && ` · ${conn.host}${conn.port ? `:${conn.port}` : ""}`}
-                    {conn.database_name && ` · ${conn.database_name}`}
-                  </p>
-                  {testError[conn.id] && testStatus[conn.id] === "error" && (
-                    <p className="mt-0.5 truncate text-xs text-status-critical">{testError[conn.id]}</p>
-                  )}
+              <div key={conn.id} className="rounded-lg border border-border bg-surface px-4 py-3">
+                {/* Header row: icon · name · test badge · action buttons */}
+                <div className="flex items-center gap-3">
+                  <Database size={18} className={cn("shrink-0", meta.color)} />
+                  <p className="min-w-0 flex-1 truncate font-medium">{conn.name}</p>
+                  <TestBadge status={testStatus[conn.id] ?? "idle"} latency={testLatency[conn.id] ?? null} />
+                  <div className="flex shrink-0 items-center gap-1">
+                    <Button variant="ghost" size="sm" disabled={disabled} onClick={() => handleTest(conn)}>
+                      Test
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditingConn(conn)}>
+                      <Edit2 size={13} />
+                    </Button>
+                    <Button
+                      variant="ghost" size="icon"
+                      className="h-7 w-7 text-status-critical"
+                      onClick={() => setConfirmingConn(conn)}
+                    >
+                      <Trash2 size={13} />
+                    </Button>
+                    <ChevronRight size={14} className="text-muted-foreground/40" />
+                  </div>
                 </div>
-                <TestBadge status={testStatus[conn.id] ?? "idle"} latency={testLatency[conn.id] ?? null} />
-                <div className="flex shrink-0 items-center gap-1">
-                  <Button variant="ghost" size="sm" disabled={disabled} onClick={() => handleTest(conn)}>
-                    Test
-                  </Button>
-                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditingConn(conn)}>
-                    <Edit2 size={13} />
-                  </Button>
-                  <Button
-                    variant="ghost" size="icon"
-                    className="h-7 w-7 text-status-critical"
-                    onClick={() => setConfirmingConn(conn)}
-                  >
-                    <Trash2 size={13} />
-                  </Button>
-                  <ChevronRight size={14} className="text-muted-foreground/40" />
-                </div>
+
+                {/* Detail row 1: type · host:port · database */}
+                <p className="mt-0.5 truncate pl-7 text-xs text-muted-foreground">
+                  {meta.label}
+                  {conn.host && ` · ${conn.host}${conn.port ? `:${conn.port}` : ""}`}
+                  {conn.database_name && ` · ${conn.database_name}`}
+                </p>
+
+                {/* Detail row 2: user · ssl · date added · element & binding counts */}
+                <p className="mt-0.5 truncate pl-7 text-xs text-muted-foreground">
+                  {conn.username && <span>User: {conn.username}</span>}
+                  {conn.username && <span className="mx-1.5 opacity-40">·</span>}
+                  <span className={conn.ssl ? "text-emerald-500" : ""}>
+                    TLS: {conn.ssl ? "On" : "Off"}
+                  </span>
+                  <span className="mx-1.5 opacity-40">·</span>
+                  <span>Added: {new Date(conn.created_at).toLocaleDateString()}</span>
+                  <span className="mx-1.5 opacity-40">·</span>
+                  <span>{deCount[conn.id] ?? 0} data element{(deCount[conn.id] ?? 0) !== 1 ? "s" : ""}</span>
+                  <span className="mx-1.5 opacity-40">·</span>
+                  <span>{sdeCount[conn.id] ?? 0} step binding{(sdeCount[conn.id] ?? 0) !== 1 ? "s" : ""}</span>
+                </p>
+
+                {/* Test error line */}
+                {testError[conn.id] && testStatus[conn.id] === "error" && (
+                  <p className="mt-0.5 truncate pl-7 text-xs text-status-critical">{testError[conn.id]}</p>
+                )}
               </div>
             );
           })}
@@ -727,12 +806,78 @@ export function ConnectionsView({ vsId }: { vsId: string }) {
         </Modal>
       )}
 
+      {/* First delete confirmation */}
       <ConfirmDialog
         open={confirmingConn !== null}
         onClose={() => setConfirmingConn(null)}
-        onConfirm={() => { if (confirmingConn) del.mutate(confirmingConn.id); }}
+        onConfirm={async () => {
+          if (!confirmingConn) return;
+          const conn = confirmingConn;
+          setConfirmingConn(null);
+          try {
+            const des = await api.list<{ id: string }>("data_elements", {
+              where: { db_connection_id: conn.id },
+            });
+            if (des.length > 0) {
+              setCascadeConfirm({ conn, deCount: des.length });
+            } else {
+              del.mutate(conn.id);
+            }
+          } catch {
+            del.mutate(conn.id);
+          }
+        }}
         message={`Move "${confirmingConn?.name ?? ""}" to Trash? It can be restored later.`}
       />
+
+      {/* Second confirmation when the connection has linked data elements */}
+      <ConfirmDialog
+        open={cascadeConfirm !== null}
+        onClose={() => setCascadeConfirm(null)}
+        onConfirm={() => {
+          if (!cascadeConfirm) return;
+          cascadeTrash.mutate(cascadeConfirm.conn.id);
+          setCascadeConfirm(null);
+        }}
+        message={`"${cascadeConfirm?.conn.name ?? ""}" has ${cascadeConfirm?.deCount ?? 0} linked data element(s) and their step bindings. All will also be moved to Trash. Continue?`}
+      />
+
+      {/* Offer to restore a matching trashed connection instead of creating a new one */}
+      <Modal
+        open={matchingTrashedConn !== null}
+        onClose={() => setMatchingTrashedConn(null)}
+        title="Existing Connection Found in Trash"
+        footer={
+          <>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                const pending = matchingTrashedConn?.pendingForm;
+                setMatchingTrashedConn(null);
+                if (pending) proceedWithCreate(pending);
+              }}
+            >
+              Create New
+            </Button>
+            <Button
+              onClick={() => {
+                const id = matchingTrashedConn?.conn.id;
+                setMatchingTrashedConn(null);
+                setShowForm(false);
+                if (id) restoreConn.mutate(id);
+              }}
+            >
+              Restore Existing
+            </Button>
+          </>
+        }
+      >
+        <p className="py-1 text-sm">
+          A connection with the same type, host, port, and username
+          (<span className="font-medium">{matchingTrashedConn?.conn.name}</span>) was previously
+          deleted. Would you like to restore it instead of creating a new one?
+        </p>
+      </Modal>
     </ViewShell>
   );
 }
