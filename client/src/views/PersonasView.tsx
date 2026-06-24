@@ -95,7 +95,7 @@ export function PersonasView({ vsId }: { vsId: string }) {
                 {p.authority_notes ?? "—"}
               </Td>
               <Td>
-                <RowActions entityKey="personas" id={p.id} onEdit={() => setEditing(p)} />
+                <RowActions entityKey="personas" id={p.id} label={p.name} onEdit={() => setEditing(p)} />
               </Td>
             </Tr>
           ))}

@@ -323,11 +323,18 @@ export function DataElementModal({
     setLiveDdlError(null);
     setLivePreview(null);
     setLivePreviewError(null);
+    // Fetch columns and preview rows in parallel so example values are ready
     fetchLiveJson<LiveColumnInfo[]>(
       `/api/db_connections/${connId}/schema/${encodeURIComponent(schema)}/tables/${encodeURIComponent(table)}/columns`,
     )
       .then((cols) => { setTableCols(cols); setTableLoading(false); })
       .catch((e: unknown) => { setTableError(String(e)); setTableLoading(false); });
+    setLivePreviewLoading(true);
+    fetchLiveJson<PreviewResult>(
+      `/api/db_connections/${connId}/schema/${encodeURIComponent(schema)}/tables/${encodeURIComponent(table)}/preview`,
+    )
+      .then((data) => { setLivePreview(data); setLivePreviewLoading(false); })
+      .catch((e: unknown) => { setLivePreviewError(String(e)); setLivePreviewLoading(false); });
   }
 
   function toggleLiveCol(colName: string, e?: React.MouseEvent) {
@@ -355,16 +362,28 @@ export function DataElementModal({
     if (!liveSel) return;
     const drafts: LiveDraftElement[] = tableCols
       .filter((c) => selectedCols.has(c.column_name))
-      .map((c) => ({
-        name:                 c.column_name,
-        business_description: "",
-        source_system:        liveSel.connName,
-        table_or_view:        liveSel.table,
-        field_name:           c.column_name,
-        data_type:            mapDbType(c.data_type),
-        length:               c.length ?? "",
-        example_value:        "",
-      }));
+      .map((c) => {
+        let exampleValue = "";
+        if (livePreview) {
+          const colIdx = livePreview.columns.indexOf(c.column_name);
+          if (colIdx !== -1) {
+            const found = livePreview.rows.find(
+              (row) => row[colIdx] !== null && row[colIdx] !== undefined && String(row[colIdx]).trim() !== "",
+            );
+            if (found !== undefined) exampleValue = String(found[colIdx]);
+          }
+        }
+        return {
+          name:                 c.column_name,
+          business_description: "",
+          source_system:        liveSel.connName,
+          table_or_view:        liveSel.table,
+          field_name:           c.column_name,
+          data_type:            mapDbType(c.data_type),
+          length:               c.length ?? "",
+          example_value:        exampleValue,
+        };
+      });
     setLiveDrafts(drafts);
     setPhase("live-review");
   }

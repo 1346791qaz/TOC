@@ -116,7 +116,7 @@ export function ConstraintsView({ vsId }: { vsId: string }) {
               <Td className="text-xs">{tocLabels[c.toc_status]}</Td>
               <Td>{c.is_system_constraint ? <Badge tone="critical">system</Badge> : "—"}</Td>
               <Td>
-                <RowActions entityKey="constraints" id={c.id} onEdit={() => setEditing(c)} />
+                <RowActions entityKey="constraints" id={c.id} label={c.title} onEdit={() => setEditing(c)} />
               </Td>
             </Tr>
           ))}

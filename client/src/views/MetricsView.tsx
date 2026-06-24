@@ -118,7 +118,7 @@ export function MetricsView({ vsId }: { vsId: string }) {
                 </Badge>
               </Td>
               <Td>
-                <RowActions entityKey="metrics" id={m.id} onEdit={() => setEditing(m)} />
+                <RowActions entityKey="metrics" id={m.id} label={m.name} onEdit={() => setEditing(m)} />
               </Td>
             </Tr>
           ))}

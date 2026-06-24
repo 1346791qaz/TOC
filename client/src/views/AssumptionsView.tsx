@@ -76,7 +76,7 @@ export function AssumptionsView({ vsId }: { vsId: string }) {
               </Td>
               <Td className="max-w-sm text-xs text-muted-foreground">{a.evidence ?? "—"}</Td>
               <Td>
-                <RowActions entityKey="assumptions" id={a.id} onEdit={() => setEditing(a)} />
+                <RowActions entityKey="assumptions" id={a.id} label={a.statement ?? a.id} onEdit={() => setEditing(a)} />
               </Td>
             </Tr>
           ))}

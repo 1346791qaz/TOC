@@ -14,6 +14,7 @@ import type { DbConnection, DbDriverType } from "@shared/schemas";
 import { useCreate, useList, useSoftDelete, useUpdate } from "@/lib/queries";
 import { ViewShell, EmptyHint } from "@/components/ViewShell";
 import { Modal } from "@/components/ui/modal";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Button } from "@/components/ui/primitives";
 import { cn } from "@/lib/utils";
 
@@ -586,8 +587,9 @@ export function ConnectionsView({ vsId }: { vsId: string }) {
   const updateConn  = useUpdate("db_connections");
   const del         = useSoftDelete("db_connections");
 
-  const [showForm,    setShowForm]    = useState(false);
-  const [editingConn, setEditingConn] = useState<DbConnection | null>(null);
+  const [showForm,       setShowForm]       = useState(false);
+  const [editingConn,    setEditingConn]    = useState<DbConnection | null>(null);
+  const [confirmingConn, setConfirmingConn] = useState<DbConnection | null>(null);
   const [formError,   setFormError]   = useState<string | null>(null);
   const [saving,      setSaving]      = useState(false);
   const [testStatus,  setTestStatus]  = useState<Record<string, TestStatus>>({});
@@ -680,8 +682,8 @@ export function ConnectionsView({ vsId }: { vsId: string }) {
                   </Button>
                   <Button
                     variant="ghost" size="icon"
-                    className="h-7 w-7 text-muted-foreground hover:text-status-critical"
-                    onClick={() => del.mutate(conn.id)}
+                    className="h-7 w-7 text-status-critical"
+                    onClick={() => setConfirmingConn(conn)}
                   >
                     <Trash2 size={13} />
                   </Button>
@@ -724,6 +726,13 @@ export function ConnectionsView({ vsId }: { vsId: string }) {
           />
         </Modal>
       )}
+
+      <ConfirmDialog
+        open={confirmingConn !== null}
+        onClose={() => setConfirmingConn(null)}
+        onConfirm={() => { if (confirmingConn) del.mutate(confirmingConn.id); }}
+        message={`Move "${confirmingConn?.name ?? ""}" to Trash? It can be restored later.`}
+      />
     </ViewShell>
   );
 }
