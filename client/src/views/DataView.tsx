@@ -177,7 +177,7 @@ export function DataView({ vsId }: { vsId: string }) {
                   return (
                     <Tr key={de.id}>
                       <Td className="text-muted-foreground">—</Td>
-                      <Td><Badge tone="muted">catalog</Badge></Td>
+                      <Td><Badge tone="neutral">catalog</Badge></Td>
                       <Td className="font-medium">
                         {de.name}
                         {de.business_description && (
