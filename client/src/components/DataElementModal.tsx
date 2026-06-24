@@ -101,6 +101,14 @@ interface LiveDraftElement {
   example_value: string;
 }
 
+interface PreviewResult {
+  columns: string[];
+  rows: unknown[][];
+  truncated: boolean;
+}
+
+type LiveTab = "fields" | "ddl" | "content";
+
 async function fetchLiveJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
   if (!res.ok) {
@@ -167,6 +175,14 @@ export function DataElementModal({
   const [liveDrafts,   setLiveDrafts]   = useState<LiveDraftElement[]>([]);
   const [liveCreating, setLiveCreating] = useState(false);
   const liveLoadRef = useRef<Record<string, boolean>>({});
+  // Tab state for the right panel
+  const [liveTab, setLiveTab] = useState<LiveTab>("fields");
+  const [liveDdl, setLiveDdl] = useState<string | null>(null);
+  const [liveDdlLoading, setLiveDdlLoading] = useState(false);
+  const [liveDdlError, setLiveDdlError] = useState<string | null>(null);
+  const [livePreview, setLivePreview] = useState<PreviewResult | null>(null);
+  const [livePreviewLoading, setLivePreviewLoading] = useState(false);
+  const [livePreviewError, setLivePreviewError] = useState<string | null>(null);
 
   const connections = useList<DbConnection>("db_connections", { where: { value_stream_id: vsId } });
   const hasConnections = (connections.data?.length ?? 0) > 0;
@@ -196,6 +212,13 @@ export function DataElementModal({
       setTableError(null);
       setSelectedCols(new Set());
       setLiveDrafts([]);
+      setLiveTab("fields");
+      setLiveDdl(null);
+      setLiveDdlLoading(false);
+      setLiveDdlError(null);
+      setLivePreview(null);
+      setLivePreviewLoading(false);
+      setLivePreviewError(null);
     }
   }, [open, stepId, mode]);
 
@@ -295,6 +318,11 @@ export function DataElementModal({
     setTableCols([]);
     setTableError(null);
     setTableLoading(true);
+    setLiveTab("fields");
+    setLiveDdl(null);
+    setLiveDdlError(null);
+    setLivePreview(null);
+    setLivePreviewError(null);
     fetchLiveJson<LiveColumnInfo[]>(
       `/api/db_connections/${connId}/schema/${encodeURIComponent(schema)}/tables/${encodeURIComponent(table)}/columns`,
     )
@@ -339,6 +367,29 @@ export function DataElementModal({
       }));
     setLiveDrafts(drafts);
     setPhase("live-review");
+  }
+
+  function handleLiveTab(tab: LiveTab) {
+    setLiveTab(tab);
+    if (!liveSel) return;
+    if (tab === "ddl" && liveDdl === null && !liveDdlLoading) {
+      setLiveDdlLoading(true);
+      setLiveDdlError(null);
+      fetchLiveJson<{ ddl: string }>(
+        `/api/db_connections/${liveSel.connId}/schema/${encodeURIComponent(liveSel.schema)}/tables/${encodeURIComponent(liveSel.table)}/ddl`,
+      )
+        .then((data) => { setLiveDdl(data.ddl); setLiveDdlLoading(false); })
+        .catch((e: unknown) => { setLiveDdlError(String(e)); setLiveDdlLoading(false); });
+    }
+    if (tab === "content" && livePreview === null && !livePreviewLoading) {
+      setLivePreviewLoading(true);
+      setLivePreviewError(null);
+      fetchLiveJson<PreviewResult>(
+        `/api/db_connections/${liveSel.connId}/schema/${encodeURIComponent(liveSel.schema)}/tables/${encodeURIComponent(liveSel.table)}/preview`,
+      )
+        .then((data) => { setLivePreview(data); setLivePreviewLoading(false); })
+        .catch((e: unknown) => { setLivePreviewError(String(e)); setLivePreviewLoading(false); });
+    }
   }
 
   function updateDraft(i: number, key: keyof LiveDraftElement, val: string) {
@@ -737,75 +788,161 @@ export function DataElementModal({
             })}
           </div>
 
-          {/* Right panel — columns of the selected table */}
+          {/* Right panel — table details */}
           <div className="flex flex-1 flex-col overflow-hidden rounded-md border border-border text-sm">
             {!liveSel ? (
               <div className="flex flex-1 items-center justify-center p-6 text-center text-xs text-muted-foreground">
-                Select a table from the connection tree to view its columns.
+                Select a table from the connection tree to inspect it.
               </div>
-            ) : tableLoading ? (
-              <div className="flex flex-1 items-center justify-center gap-2 text-muted-foreground">
-                <Loader2 size={14} className="animate-spin" /> Loading columns…
-              </div>
-            ) : tableError ? (
-              <p className="p-3 text-xs text-status-critical">{tableError}</p>
             ) : (
               <>
-                {/* Column header */}
-                <div className="flex shrink-0 items-center gap-2 border-b border-border bg-muted/30 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  <input
-                    type="checkbox"
-                    className="h-3.5 w-3.5 shrink-0"
-                    checked={allChecked}
-                    ref={(el) => { if (el) el.indeterminate = someChecked; }}
-                    onChange={toggleAllLiveCols}
-                  />
-                  <span className="w-[40%]">Column</span>
-                  <span className="w-[25%]">Type</span>
-                  <span className="w-[12%]">Length</span>
-                  <span className="ml-auto">Nullable</span>
-                </div>
-                {/* Column rows */}
-                <div className="flex-1 overflow-y-auto">
-                  {tableCols.length === 0 ? (
-                    <p className="px-3 py-4 text-xs text-muted-foreground">No columns returned.</p>
-                  ) : (
-                    tableCols.map((col) => {
-                      const checked = selectedCols.has(col.column_name);
-                      return (
-                        <div
-                          key={col.column_name}
-                          className={cn(
-                            "flex cursor-pointer items-center gap-2 px-3 py-1.5 hover:bg-muted/40",
-                            checked && "bg-primary/5",
-                          )}
-                          onClick={(e) => toggleLiveCol(col.column_name, e)}
-                        >
-                          <input
-                            type="checkbox"
-                            className="h-3.5 w-3.5 shrink-0 pointer-events-none"
-                            checked={checked}
-                            readOnly
-                          />
-                          <span className="w-[40%] font-mono text-xs">{col.column_name}</span>
-                          <span className="w-[25%] text-xs text-muted-foreground">{col.data_type}</span>
-                          <span className="w-[12%] text-xs text-muted-foreground">{col.length ?? "—"}</span>
-                          <span className="ml-auto text-xs">
-                            {col.is_nullable
-                              ? <span className="text-muted-foreground">NULL</span>
-                              : <span className="text-[10px] text-status-critical">NOT NULL</span>
-                            }
-                          </span>
-                        </div>
-                      );
-                    })
+                {/* Tab bar */}
+                <div className="flex shrink-0 border-b border-border">
+                  {(["fields", "ddl", "content"] as const).map((tab) => (
+                    <button
+                      key={tab}
+                      type="button"
+                      onClick={() => handleLiveTab(tab)}
+                      className={cn(
+                        "px-3 py-1.5 text-xs font-medium",
+                        liveTab === tab
+                          ? "border-b-2 border-primary text-primary"
+                          : "text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      {tab === "fields" ? "Fields" : tab === "ddl" ? "DDL" : "Content"}
+                    </button>
+                  ))}
+                  {checkedCount > 0 && (
+                    <span className="ml-auto self-center pr-3 text-[10px] text-muted-foreground">
+                      {checkedCount} selected
+                    </span>
                   )}
                 </div>
-                {/* Selection count footer */}
-                {checkedCount > 0 && (
-                  <div className="shrink-0 border-t border-border bg-muted/20 px-3 py-1 text-xs text-muted-foreground">
-                    {checkedCount} column{checkedCount !== 1 ? "s" : ""} selected
-                  </div>
+
+                {/* Fields tab */}
+                {liveTab === "fields" && (
+                  tableLoading ? (
+                    <div className="flex flex-1 items-center justify-center gap-2 text-muted-foreground">
+                      <Loader2 size={14} className="animate-spin" /> Loading columns…
+                    </div>
+                  ) : tableError ? (
+                    <p className="p-3 text-xs text-status-critical">{tableError}</p>
+                  ) : (
+                    <>
+                      <div className="flex shrink-0 items-center gap-2 border-b border-border bg-muted/30 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                        <input
+                          type="checkbox"
+                          className="h-3.5 w-3.5 shrink-0"
+                          checked={allChecked}
+                          ref={(el) => { if (el) el.indeterminate = someChecked; }}
+                          onChange={toggleAllLiveCols}
+                        />
+                        <span className="w-[40%]">Column</span>
+                        <span className="w-[25%]">Type</span>
+                        <span className="w-[12%]">Length</span>
+                        <span className="ml-auto">Nullable</span>
+                      </div>
+                      <div className="flex-1 overflow-y-auto">
+                        {tableCols.length === 0 ? (
+                          <p className="px-3 py-4 text-xs text-muted-foreground">No columns returned.</p>
+                        ) : (
+                          tableCols.map((col) => {
+                            const checked = selectedCols.has(col.column_name);
+                            return (
+                              <div
+                                key={col.column_name}
+                                className={cn(
+                                  "flex cursor-pointer items-center gap-2 px-3 py-1.5 hover:bg-muted/40",
+                                  checked && "bg-primary/5",
+                                )}
+                                onClick={(e) => toggleLiveCol(col.column_name, e)}
+                              >
+                                <input
+                                  type="checkbox"
+                                  className="h-3.5 w-3.5 shrink-0 pointer-events-none"
+                                  checked={checked}
+                                  readOnly
+                                />
+                                <span className="w-[40%] font-mono text-xs">{col.column_name}</span>
+                                <span className="w-[25%] text-xs text-muted-foreground">{col.data_type}</span>
+                                <span className="w-[12%] text-xs text-muted-foreground">{col.length ?? "—"}</span>
+                                <span className="ml-auto text-xs">
+                                  {col.is_nullable
+                                    ? <span className="text-muted-foreground">NULL</span>
+                                    : <span className="text-[10px] text-status-critical">NOT NULL</span>
+                                  }
+                                </span>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    </>
+                  )
+                )}
+
+                {/* DDL tab */}
+                {liveTab === "ddl" && (
+                  liveDdlLoading ? (
+                    <div className="flex flex-1 items-center justify-center gap-2 text-muted-foreground">
+                      <Loader2 size={14} className="animate-spin" /> Loading DDL…
+                    </div>
+                  ) : liveDdlError ? (
+                    <p className="p-3 text-xs text-status-critical">{liveDdlError}</p>
+                  ) : liveDdl ? (
+                    <pre className="flex-1 overflow-auto p-3 font-mono text-xs text-foreground">
+                      {liveDdl}
+                    </pre>
+                  ) : null
+                )}
+
+                {/* Content tab */}
+                {liveTab === "content" && (
+                  livePreviewLoading ? (
+                    <div className="flex flex-1 items-center justify-center gap-2 text-muted-foreground">
+                      <Loader2 size={14} className="animate-spin" /> Loading data…
+                    </div>
+                  ) : livePreviewError ? (
+                    <p className="p-3 text-xs text-status-critical">{livePreviewError}</p>
+                  ) : livePreview ? (
+                    <>
+                      <div className="flex-1 overflow-auto">
+                        <table className="w-full text-xs">
+                          <thead className="sticky top-0 bg-muted/90">
+                            <tr>
+                              {livePreview.columns.map((col) => (
+                                <th key={col} className="whitespace-nowrap px-2 py-1.5 text-left font-semibold text-muted-foreground">
+                                  {col}
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {livePreview.rows.map((row, i) => (
+                              <tr key={i} className="border-t border-border/40 hover:bg-muted/20">
+                                {(row as unknown[]).map((cell, j) => (
+                                  <td key={j} className="max-w-[180px] truncate whitespace-nowrap px-2 py-1 font-mono" title={cell === null || cell === undefined ? "NULL" : typeof cell === "object" ? JSON.stringify(cell) : String(cell)}>
+                                    {cell === null || cell === undefined
+                                      ? <span className="italic text-muted-foreground/40">NULL</span>
+                                      : typeof cell === "object"
+                                        ? <span className="text-muted-foreground">{JSON.stringify(cell)}</span>
+                                        : String(cell)
+                                    }
+                                  </td>
+                                ))}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      {livePreview.truncated && (
+                        <div className="shrink-0 border-t border-border bg-muted/20 px-3 py-1 text-xs text-muted-foreground">
+                          Showing first 100 rows
+                        </div>
+                      )}
+                    </>
+                  ) : null
                 )}
               </>
             )}
