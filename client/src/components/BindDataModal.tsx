@@ -724,7 +724,7 @@ export function BindDataModal({
 
             {/* Rows */}
             <div className="flex-1 overflow-y-auto">
-              {filteredUnbound.length === 0 && filteredBound.length === 0 ? (
+              {filteredUnbound.length === 0 ? (
                 <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
                   {search
                     ? `No elements match "${search}"`
@@ -776,31 +776,6 @@ export function BindDataModal({
                     );
                   })}
 
-                  {filteredBound.length > 0 && (
-                    <>
-                      <div className="border-b border-border/50 bg-muted/20 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                        Already bound to this step
-                      </div>
-                      {filteredBound.map((d) => {
-                        const loc = [d.table_or_view, d.field_name].filter(Boolean).join(".");
-                        return (
-                          <div
-                            key={d.id}
-                            className="grid grid-cols-[1.5rem_1fr_7rem_7rem] items-center gap-x-2 border-b border-border/50 px-3 py-2 text-sm opacity-40"
-                          >
-                            <span />
-                            <div className="min-w-0">
-                              <p className="truncate font-medium">{d.name}</p>
-                            </div>
-                            <span className="truncate text-xs text-muted-foreground">
-                              {d.source_system ?? "—"}
-                            </span>
-                            <span className="mono truncate text-xs">{loc || "—"}</span>
-                          </div>
-                        );
-                      })}
-                    </>
-                  )}
                 </>
               )}
             </div>
