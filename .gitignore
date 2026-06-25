@@ -23,3 +23,6 @@ playwright-report/
 e2e/__screens__/
 blob-report/
 .playwright/
+
+# Notional demo mockups (local only, not part of the application)
+OIL_*.html
