@@ -29,6 +29,7 @@ function step(id: string, name = "step", extra: Partial<ProcessStep> = {}): Proc
     data_databases: null,
     data_tables: null,
     data_etl_jobs: null,
+    location_id: null,
     ...extra,
   };
 }

@@ -407,6 +407,7 @@ export const metricFields: FieldDef[] = [
 
 export const locationFields: FieldDef[] = [
   { name: "name", label: "Location name", type: "text", required: true, full: true },
+  { name: "location_type", label: "Type", type: "select", options: ["plant_facility", "floor", "work_center"] },
   { name: "description", label: "Description", type: "textarea", full: true },
 ];
 

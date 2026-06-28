@@ -101,3 +101,13 @@ export type ArtifactType = z.infer<typeof artifactTypeSchema>;
 export const ARTIFACT_FORMS = ["digital", "physical", "intangible"] as const;
 export const artifactFormSchema = z.enum(ARTIFACT_FORMS);
 export type ArtifactForm = z.infer<typeof artifactFormSchema>;
+
+export const LOCATION_TYPES = ["plant_facility", "floor", "work_center"] as const;
+export const locationTypeSchema = z.enum(LOCATION_TYPES);
+export type LocationType = z.infer<typeof locationTypeSchema>;
+
+export const LOCATION_TYPE_LABELS: Record<typeof LOCATION_TYPES[number], string> = {
+  plant_facility: "Plant / Facility",
+  floor: "Floor",
+  work_center: "Work Center",
+};

@@ -9,6 +9,7 @@ import {
   edgeTypeSchema,
   flowNodeTypeSchema,
   likelihoodSchema,
+  locationTypeSchema,
   metricTypeSchema,
   presenceSchema,
   raciRoleSchema,
@@ -249,7 +250,11 @@ export type DbConnection = z.infer<typeof dbConnection.record>;
 // ---------------------------------------------------------------------------
 export const location = makeEntity({
   name: z.string().min(1, "Name is required"),
+  location_type: locationTypeSchema.default("work_center"),
   description: nullableText,
+  address: nullableText,
+  latitude: nullableNumber,
+  longitude: nullableNumber,
 });
 export type Location = z.infer<typeof location.record>;
 export type LocationCreate = z.infer<typeof location.createInput>;

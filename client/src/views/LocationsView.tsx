@@ -1,25 +1,27 @@
 import { useMemo, useState } from "react";
 import { Plus } from "lucide-react";
 import type { Location } from "@shared/schemas";
+import { LOCATION_TYPE_LABELS } from "@shared/enums";
 import { useList } from "@/lib/queries";
-import { locationFields } from "@/lib/entityConfig";
 import { ViewShell, SearchBar, Table, Tr, Td, EmptyHint, type SortDir } from "@/components/ViewShell";
-import { Button } from "@/components/ui/primitives";
-import { EntityModalForm } from "@/components/EntityModalForm";
+import { Badge, Button } from "@/components/ui/primitives";
 import { RowActions } from "@/components/RowActions";
+import { LocationModal } from "@/components/LocationModal";
 
-const COLS = ["Name", "Description", ""] as const;
+const COLS = ["Name", "Type", "Address", "Description", ""] as const;
 
 function getVal(l: Location, col: string): string {
   switch (col) {
     case "Name": return l.name ?? "";
+    case "Type": return l.location_type ?? "";
+    case "Address": return l.address ?? "";
     case "Description": return l.description ?? "";
     default: return "";
   }
 }
 
 function searchText(l: Location) {
-  return [l.name, l.description].filter(Boolean).join(" ").toLowerCase();
+  return [l.name, l.location_type, l.address, l.description].filter(Boolean).join(" ").toLowerCase();
 }
 
 export function LocationsView({ vsId: _vsId }: { vsId: string }) {
@@ -54,7 +56,7 @@ export function LocationsView({ vsId: _vsId }: { vsId: string }) {
   return (
     <ViewShell
       title="Locations"
-      subtitle="Physical workcenters, stations, or rooms where process steps occur. Shared across all value streams."
+      subtitle="Physical workcenters, stations, and facilities where process steps occur. Shared across all value streams."
       actions={
         <>
           <SearchBar value={query} onChange={setQuery} placeholder="Search locations…" />
@@ -71,6 +73,12 @@ export function LocationsView({ vsId: _vsId }: { vsId: string }) {
           {rows.map((l) => (
             <Tr key={l.id}>
               <Td className="font-medium">{l.name}</Td>
+              <Td>
+                <Badge tone="info">
+                  {LOCATION_TYPE_LABELS[l.location_type as keyof typeof LOCATION_TYPE_LABELS] ?? l.location_type}
+                </Badge>
+              </Td>
+              <Td className="max-w-xs truncate text-xs text-muted-foreground">{l.address ?? "—"}</Td>
               <Td className="max-w-xs truncate text-xs text-muted-foreground">{l.description ?? "—"}</Td>
               <Td>
                 <RowActions entityKey="locations" id={l.id} label={l.name} onEdit={() => setEditing(l)} />
@@ -80,23 +88,8 @@ export function LocationsView({ vsId: _vsId }: { vsId: string }) {
         </Table>
       )}
 
-      <EntityModalForm
-        open={creating}
-        onClose={() => setCreating(false)}
-        entityKey="locations"
-        title="New Location"
-        fields={locationFields}
-      />
-      {editing && (
-        <EntityModalForm
-          open
-          onClose={() => setEditing(null)}
-          entityKey="locations"
-          title="Edit Location"
-          fields={locationFields}
-          initial={editing}
-        />
-      )}
+      {creating && <LocationModal open onClose={() => setCreating(false)} />}
+      {editing && <LocationModal open onClose={() => setEditing(null)} initial={editing} />}
     </ViewShell>
   );
 }

@@ -8,6 +8,7 @@ import {
   type Engagement,
   type EntityKey,
   type FlowEdge,
+  type Location,
   type Metric,
   type Persona,
   type ProcessStep,
@@ -29,6 +30,7 @@ export interface RepoMap {
   step_personas: Repository<StepPersona>;
   data_elements: Repository<DataElement>;
   step_data_elements: Repository<StepDataElement>;
+  locations: Repository<Location>;
   artifacts: Repository<Artifact>;
   step_artifacts: Repository<StepArtifact>;
   constraints: Repository<Constraint>;

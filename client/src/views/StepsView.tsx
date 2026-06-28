@@ -375,8 +375,8 @@ function StepLocation({ step }: { step: ProcessStep }) {
           </Button>
         )}
       </div>
-      {current?.description && (
-        <p className="mt-1 text-xs text-muted-foreground">{current.description}</p>
+      {current?.address && (
+        <p className="mt-1 text-xs text-muted-foreground">{current.address}</p>
       )}
     </Card>
   );
