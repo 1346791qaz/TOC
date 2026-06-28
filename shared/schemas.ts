@@ -132,6 +132,7 @@ export const processStep = makeEntity({
   data_databases: nullableText,
   data_tables: nullableText,
   data_etl_jobs: nullableText,
+  location_id: z.string().uuid().nullable().default(null),
 });
 export type ProcessStep = z.infer<typeof processStep.record>;
 
@@ -243,6 +244,17 @@ export const dbConnection = makeEntity({
 export type DbConnection = z.infer<typeof dbConnection.record>;
 
 // ---------------------------------------------------------------------------
+// 4.9b locations — physical workcenters or stations where steps occur.
+// App-wide (no value_stream_id); a step optionally points to one via location_id.
+// ---------------------------------------------------------------------------
+export const location = makeEntity({
+  name: z.string().min(1, "Name is required"),
+  description: nullableText,
+});
+export type Location = z.infer<typeof location.record>;
+export type LocationCreate = z.infer<typeof location.createInput>;
+
+// ---------------------------------------------------------------------------
 // 4.9c artifacts — physical, digital, or intangible items that move through
 // the value stream (docs, spreadsheets, videos, PDFs, paper files, etc.).
 // These are NOT data elements — they don't map to a specific data field.
@@ -293,6 +305,7 @@ export const ENTITIES = {
   step_personas: { table: "step_personas", schema: stepPersona },
   data_elements: { table: "data_elements", schema: dataElement },
   step_data_elements: { table: "step_data_elements", schema: stepDataElement },
+  locations: { table: "locations", schema: location },
   artifacts: { table: "artifacts", schema: artifact },
   step_artifacts: { table: "step_artifacts", schema: stepArtifact },
   constraints: { table: "constraints", schema: constraint },

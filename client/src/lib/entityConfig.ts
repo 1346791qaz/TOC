@@ -405,6 +405,11 @@ export const metricFields: FieldDef[] = [
   { name: "source", label: "Source", type: "text", full: true },
 ];
 
+export const locationFields: FieldDef[] = [
+  { name: "name", label: "Location name", type: "text", required: true, full: true },
+  { name: "description", label: "Description", type: "textarea", full: true },
+];
+
 export const artifactFields: FieldDef[] = [
   { name: "name", label: "Artifact name", type: "text", required: true, full: true },
   { name: "artifact_type", label: "Type", type: "select", options: ARTIFACT_TYPES },

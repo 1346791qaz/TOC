@@ -1,10 +1,10 @@
 import { useMemo, useState } from "react";
-import { ArrowRight, Database, FileStack, Layers, Pencil, Plus, X } from "lucide-react";
+import { ArrowRight, Database, FileStack, Layers, MapPin, Pencil, Plus, X } from "lucide-react";
 import type { LinkedDataElement } from "@shared/gaps";
-import type { Artifact, DataElement, Persona, ProcessStep, StepArtifact, StepDataElement, StepPersona, ValueStream } from "@shared/schemas";
+import type { Artifact, DataElement, Location, Persona, ProcessStep, StepArtifact, StepDataElement, StepPersona, ValueStream } from "@shared/schemas";
 import { linkDataElements } from "@shared/gaps";
 import { BINDING_POINTS, RACI_ROLES } from "@shared/enums";
-import { useCreate, useList, useSoftDelete } from "@/lib/queries";
+import { useCreate, useList, useSoftDelete, useUpdate } from "@/lib/queries";
 import { artifactFields, processStepFields } from "@/lib/entityConfig";
 import { useUi } from "@/store";
 import { fmtNum } from "@/lib/utils";
@@ -228,6 +228,7 @@ function StepDetail({
         )}
       </Card>
 
+      <StepLocation step={step} />
       <DataLandscape step={step} />
       <StepPersonas step={step} vsId={vsId} />
       <StepData step={step} vsId={vsId} linkedElements={linkedElements.filter((d) => d.step_id === step.id)} availableDefs={availableDefs} />
@@ -334,6 +335,49 @@ function StepSubSteps({
         fields={processStepFields}
         extra={{ value_stream_id: vsId, parent_step_id: step.id }}
       />
+    </Card>
+  );
+}
+
+function StepLocation({ step }: { step: ProcessStep }) {
+  const locations = useList<Location>("locations");
+  const update = useUpdate("process_steps");
+  const current = (locations.data ?? []).find((l) => l.id === step.location_id);
+
+  return (
+    <Card>
+      <p className="mb-2 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+        <MapPin size={11} /> Location
+      </p>
+      <div className="flex items-center gap-2">
+        <Select
+          value={step.location_id ?? ""}
+          onChange={(e) =>
+            update.mutate({ id: step.id, data: { location_id: e.target.value || null } })
+          }
+          className="h-8 flex-1"
+        >
+          <option value="">— Not applicable —</option>
+          {(locations.data ?? []).map((l) => (
+            <option key={l.id} value={l.id}>
+              {l.name}
+            </option>
+          ))}
+        </Select>
+        {current && (
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-8 w-8 shrink-0"
+            onClick={() => update.mutate({ id: step.id, data: { location_id: null } })}
+          >
+            <X size={12} />
+          </Button>
+        )}
+      </div>
+      {current?.description && (
+        <p className="mt-1 text-xs text-muted-foreground">{current.description}</p>
+      )}
     </Card>
   );
 }

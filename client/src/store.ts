@@ -13,6 +13,7 @@ export type ViewKey =
   | "candidates"
   | "metrics"
   | "assumptions"
+  | "locations"
   | "trash"
   | "io";
 

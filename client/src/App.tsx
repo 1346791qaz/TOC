@@ -8,6 +8,7 @@ import {
   FileStack,
   GitBranch,
   ListChecks,
+  MapPin,
   Network,
   PlugZap,
   Share2,
@@ -36,6 +37,7 @@ import { IoView } from "./views/IoView";
 import { CanvasView } from "./views/CanvasView";
 import { ConnectionsView } from "./views/ConnectionsView";
 import { ArtifactsView } from "./views/ArtifactsView";
+import { LocationsView } from "./views/LocationsView";
 
 export interface NavItem {
   view: ViewKey;
@@ -51,6 +53,7 @@ export const NAV: NavItem[] = [
   { view: "gaps", label: "Data Gap Report", icon: AlertTriangle, group: "analysis" },
   { view: "steps", label: "Process Steps", icon: Workflow, group: "model" },
   { view: "personas", label: "Personas", icon: Users, group: "model" },
+  { view: "locations", label: "Locations", icon: MapPin, group: "model" },
   { view: "data", label: "Data Elements", icon: Database, group: "model" },
   { view: "artifacts", label: "Artifacts", icon: FileStack, group: "model" },
   { view: "connections", label: "DB Connections", icon: PlugZap, group: "model" },
@@ -157,6 +160,8 @@ function ViewRouter({
       return <StepsView vsId={valueStreamId} />;
     case "personas":
       return <PersonasView vsId={valueStreamId} />;
+    case "locations":
+      return <LocationsView vsId={valueStreamId} />;
     case "data":
       return <DataView vsId={valueStreamId} />;
     case "artifacts":
